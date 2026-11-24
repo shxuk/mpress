@@ -1,0 +1,30 @@
+{
+  "name": "wechat-article-publisher",
+  "version": "1.0.0",
+  "description": "Markdown to WeChat Official Account HTML renderer, SVG fold injector & idempotent draft publisher",
+  "type": "module",
+  "main": "scripts/wechat.mjs",
+  "bin": {
+    "wechat-publisher": "./scripts/wechat.mjs"
+  },
+  "scripts": {
+    "gen": "node scripts/wechat.mjs gen",
+    "push": "node scripts/wechat.mjs push"
+  },
+  "dependencies": {
+    "juice": "^11.0.0",
+    "markdown-it": "^14.1.0"
+  },
+  "keywords": [
+    "wechat",
+    "markdown",
+    "publisher",
+    "svg-fold",
+    "typesetting",
+    "ai-skill"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

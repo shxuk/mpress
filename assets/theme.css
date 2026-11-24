@@ -1,0 +1,410 @@
+/*
+ * wechat-publisher 主题：取值来自 design/tokens/color.light.tokens.json 与 design/color-values.md。
+ * 强调色用于导言、章节页签、链接与折叠提示；墨青实底只给开头导言。
+ * 公众号画布固定白色，根节点不涂 bgColor.default。
+ */
+#wx-article {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+		"Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+	font-size: 16px;
+	line-height: 1.75;
+	color: #111819;
+	letter-spacing: 0.01em;
+	word-break: break-word;
+}
+
+#wx-article p {
+	margin: 1em 0;
+}
+
+/* wechatPostRender 会把根节点颜色强制成纯黑，正文在这里拉回 fgColor.default */
+#wx-article p,
+#wx-article li,
+#wx-article td,
+#wx-article th {
+	color: #111819;
+}
+
+#wx-article h1,
+#wx-article h2,
+#wx-article h3,
+#wx-article h4,
+#wx-article h5,
+#wx-article h6 {
+	margin: 1.6em 0 0.7em;
+	line-height: 1.35;
+	font-weight: 700;
+	color: #111819;
+}
+
+#wx-article h1 {
+	font-size: 1.5em;
+}
+
+#wx-article h2 {
+	font-size: 1.28em;
+	padding-left: 0.6em;
+	border-left: 4px solid #111819;
+}
+
+#wx-article h3 {
+	font-size: 1.14em;
+}
+
+#wx-article h4,
+#wx-article h5,
+#wx-article h6 {
+	font-size: 1em;
+}
+
+#wx-article a {
+	color: #007275;
+	text-decoration: none;
+	border-bottom: 1px solid #c7d1d1;
+}
+
+#wx-article strong {
+	color: #111819;
+	font-weight: 700;
+}
+
+#wx-article code {
+	font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+	font-size: 0.88em;
+	padding: 2px 5px;
+	border-radius: 3px;
+	background: #e8eeee;
+	color: #111819;
+}
+
+#wx-article pre {
+	margin: 24px 0;
+	padding: 14px 16px;
+	overflow: hidden;
+	border-left: 3px solid #5d6667;
+	border-radius: 6px;
+	background: #f5f7f7;
+}
+
+#wx-article pre code {
+	padding: 0;
+	background: none;
+	color: #111819;
+	font-size: 14px;
+	line-height: 1.75;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+#wx-article table {
+	width: 100%;
+	margin: 1.4em 0;
+	border-collapse: collapse;
+	font-size: 0.86em;
+}
+
+#wx-article th {
+	background: #e8eeee;
+	color: #111819;
+	font-weight: 600;
+	text-align: left;
+}
+
+#wx-article th,
+#wx-article td {
+	padding: 8px 10px;
+	border: 1px solid #c7d1d1;
+	vertical-align: top;
+}
+
+#wx-article hr {
+	margin: 2em 0;
+	border: none;
+	border-top: 1px solid #c7d1d1;
+}
+
+#wx-article img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin: 1.2em auto;
+}
+
+#wx-article ul,
+#wx-article ol {
+	padding-left: 1.4em;
+}
+
+#wx-article li {
+	margin: 0.35em 0;
+}
+
+#wx-article svg {
+	max-width: 100%;
+	height: auto;
+}
+
+/* SVG 折叠块：上面的 max-width / height:auto 会被内联到组件上。
+   部分 CSS 内联工具会给 <svg> 补 `height: auto`，所以折叠高度写在 height 属性上，
+   脚本 restoreSvgHeight 会把这个 CSS height 去掉；这里只用类名补回裁切与底色。 */
+#wx-article .wx-fold-outer {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	overflow: hidden;
+	background: #f5f7f7;
+	outline: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+#wx-article .wx-fold-inner {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+}
+
+/* 收起提示与标题行的展开提示呼应：小号、右对齐、方向箭头，不独占大色块。 */
+#wx-article .wx-fold-hint {
+	margin: 0;
+	padding: 0 14px 10px;
+	text-align: right;
+	font-size: 11px;
+	line-height: 1.5;
+	letter-spacing: 0.02em;
+	color: #007275;
+	background: #f5f7f7;
+	outline: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* 宽度驱动的 SVG 展开：允许 width 动画从 100% 长到 252% */
+#wx-article svg.wx-svg-wide {
+	display: block;
+	width: 100%;
+	max-width: none !important;
+	height: auto;
+}
+
+#wx-article #footnotes p {
+	display: flex;
+	margin: 0;
+	font-size: 0.86em;
+	color: #5d6667;
+}
+
+/* ==========================================================================
+   编辑部风组件（公众号落地层）
+   取值：ink #111819 / muted #5d6667 / rule #c7d1d1 / surface #e8eeee
+         paper #f5f7f7 / accent #007275 / on-accent #f2f7f6 / danger #a91611
+   圆角：块级 6px、行内 3px，与主题既有半径一致。
+   ========================================================================== */
+
+/* 导语：全文唯一的墨青块，只放开头导言 */
+#wx-article .wx-lead {
+	margin: 0 0 40px;
+	padding: 24px;
+	border-radius: 6px;
+	background: #007275;
+	font-size: 16px;
+	line-height: 1.75;
+	color: #f2f7f6;
+}
+
+/* 篇章标题：H1，一条墨色底线收住 */
+#wx-article .wx-chapter {
+	margin: 48px 0 24px;
+	padding: 0 0 14px;
+	border-bottom: 1px solid #111819;
+	font-size: 24px;
+	line-height: 1.3;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	color: #111819;
+}
+
+/* 章节标题：24×24 墨青页签 + 20px 标题 */
+#wx-article .wx-h2 {
+	margin: 48px 0 16px;
+	line-height: 24px;
+}
+#wx-article .wx-h2-no {
+	display: inline-block;
+	width: 24px;
+	height: 24px;
+	line-height: 24px;
+	text-align: center;
+	vertical-align: middle;
+	background: #007275;
+	color: #f2f7f6;
+	font-size: 11px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+#wx-article .wx-h2-text {
+	display: inline-block;
+	margin: 0 0 0 12px;
+	vertical-align: middle;
+	font-size: 20px;
+	line-height: 1.35;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	color: #111819;
+}
+
+/* 小节标题：3px 墨色左竖条 */
+#wx-article .wx-h3 {
+	margin: 32px 0 12px;
+	padding: 0 0 0 10px;
+	border-left: 3px solid #111819;
+	font-size: 17px;
+	line-height: 1.45;
+	font-weight: 700;
+	color: #111819;
+}
+
+/* 提示块：四种语义，一个形状 */
+#wx-article .wx-box {
+	margin: 24px 0;
+	padding: 14px 16px;
+	border-left: 3px solid #5d6667;
+	border-radius: 6px;
+	background: #f5f7f7;
+}
+#wx-article .wx-box-label {
+	margin: 0 0 6px;
+	font-size: 10px;
+	line-height: 1.6;
+	font-weight: 500;
+	letter-spacing: 0.18em;
+	color: #5d6667;
+}
+#wx-article .wx-box-title {
+	margin: 0 0 6px;
+	font-size: 15px;
+	line-height: 1.7;
+	font-weight: 700;
+	color: #111819;
+}
+#wx-article .wx-box-body {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.75;
+	color: #111819;
+}
+#wx-article .wx-box-tip {
+	border-left-color: #007275;
+}
+#wx-article .wx-box-tip .wx-box-label {
+	color: #007275;
+}
+#wx-article .wx-box-note {
+	border-left-color: #5d6667;
+}
+#wx-article .wx-box-warning {
+	border-left-color: #a91611;
+	background: #f7f5f5;
+}
+#wx-article .wx-box-warning .wx-box-label {
+	color: #a91611;
+}
+#wx-article .wx-box-important {
+	border-left-color: #111819;
+}
+#wx-article .wx-box-important .wx-box-label {
+	color: #111819;
+}
+
+/* 长引 + 出处 */
+#wx-article .wx-quote {
+	margin: 40px 0;
+	padding: 4px 0 4px 18px;
+	border-left: 2px solid #111819;
+}
+#wx-article .wx-quote-text {
+	margin: 0;
+	font-family: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", serif;
+	font-size: 17px;
+	line-height: 1.8;
+	color: #111819;
+}
+#wx-article .wx-quote-source {
+	margin: 10px 0 0;
+	font-size: 12px;
+	line-height: 1.6;
+	color: #5d6667;
+	text-align: right;
+}
+
+/* 代码块：不做深色编辑器，统一沿用 NOTE 的浅底、灰竖线与圆角 */
+#wx-article .wx-pre {
+	margin: 24px 0;
+	padding: 14px 16px;
+	border-left: 3px solid #5d6667;
+	border-radius: 6px;
+	overflow: hidden;
+	background: #f5f7f7;
+}
+#wx-article .wx-pre-lang {
+	margin: 0 0 6px;
+	padding: 0;
+	font-size: 10px;
+	line-height: 1.6;
+	font-weight: 500;
+	letter-spacing: 0.18em;
+	color: #5d6667;
+}
+#wx-article .wx-pre-body {
+	padding: 0;
+}
+/* 不用 <pre>：每行一个 <p>，保留缩进，长行在卡片内换行。 */
+#wx-article .wx-pre-line {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.75;
+	color: #111819;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* 通栏图 + 图注 */
+#wx-article .wx-figure {
+	margin: 32px 0 0;
+}
+#wx-article .wx-figure img {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	height: auto;
+	margin: 0;
+}
+#wx-article .wx-caption {
+	margin: 10px 0 32px;
+	font-size: 12px;
+	line-height: 1.6;
+	letter-spacing: 0.02em;
+	color: #5d6667;
+}
+
+/* 文末收束：墨青块已经专属于导语，这里只保留普通正文 */
+#wx-article .wx-end {
+	margin: 48px 0 0;
+}
+#wx-article .wx-end-text {
+	margin: 0;
+	font-size: 16px;
+	line-height: 1.75;
+	color: #111819;
+}
+
+/* 签名 */
+#wx-article .wx-sign {
+	margin: 32px 0 0;
+	padding: 16px 0 0;
+	border-top: 1px solid #c7d1d1;
+}
+#wx-article .wx-sign p {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.7;
+	color: #5d6667;
+}

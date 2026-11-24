@@ -1,0 +1,28 @@
+<!--
+  微信公众号 SVG 折叠块 · 紧凑版（v4）
+  外层 svg 无 viewBox，只做高度动画与裁切；内层 svg 固定比例承载文字。
+  details：粗标题 + 正文，不生成空摘要。fold：有摘要时才显示第二行。
+  收起态标题与「点击展开 ↓」同一行；展开后正文下方是「点击收起 ↑」。
+  双热区保持原机制：卡片 focusin 展开，底部 p 让卡片 focusout 收起。
+  禁止 id、style 标签、onclick、外层 viewBox、height:auto。
+-->
+<section style="margin:24px 0;border-radius:6px;overflow:hidden;background:#f5f7f7;">
+<svg class="wx-fold-outer" tabindex="0" xmlns="http://www.w3.org/2000/svg" width="100%" height="{{COLLAPSED_VW}}vw">
+  <animate attributeName="height" attributeType="XML" begin="focusin"
+           values="{{COLLAPSED_VW}}vw;{{EXPANDED_VW}}vw" dur="0.26s" fill="freeze" restart="whenNotActive"></animate>
+  <animate attributeName="height" attributeType="XML" begin="focusout"
+           values="{{EXPANDED_VW}}vw;{{COLLAPSED_VW}}vw" dur="0.22s" fill="freeze" restart="whenNotActive"></animate>
+  <svg class="wx-fold-inner" x="0" y="0" width="100%" height="{{EXPANDED_VW}}vw"
+       viewBox="0 0 {{VIEWBOX_W}} {{VIEWBOX_H}}" preserveAspectRatio="xMinYMin meet"
+       xmlns="http://www.w3.org/2000/svg">
+    <rect width="{{VIEWBOX_W}}" height="{{VIEWBOX_H}}" fill="#f5f7f7"></rect>
+    <text x="24" y="44" font-size="30" font-weight="700" fill="#111819"
+          font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif">{{TITLE}}</text>
+    <text x="662" y="42" text-anchor="end" font-size="20" fill="#007275"
+          font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif">{{EXPAND_LABEL}}</text>
+    {{SUMMARY_LINE}}
+    {{BODY_LINES}}
+  </svg>
+</svg>
+<p class="wx-fold-hint" tabindex="0"><span leaf="">点击收起 ↑</span></p>
+</section>
