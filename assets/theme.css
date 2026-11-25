@@ -1,7 +1,7 @@
 /*
- * wechat-publisher 主题：取值来自 design/tokens/color.light.tokens.json 与 design/color-values.md。
- * 强调色用于导言、章节页签、链接与折叠提示；墨青实底只给开头导言。
- * 公众号画布固定白色，根节点不涂 bgColor.default。
+ * wechat-publisher 唯一视觉主题（所有参数呈现在 templates/editorial.md 中）。
+ * 强调色 #007275 用于导言、二级标题编号方块、链接与折叠提示。
+ * 公众号画布固定白底 #ffffff。
  */
 #wx-article {
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
@@ -17,7 +17,6 @@
 	margin: 1em 0;
 }
 
-/* wechatPostRender 会把根节点颜色强制成纯黑，正文在这里拉回 fgColor.default */
 #wx-article p,
 #wx-article li,
 #wx-article td,
@@ -38,23 +37,21 @@
 }
 
 #wx-article h1 {
-	font-size: 1.5em;
+	font-size: 24px;
 }
 
 #wx-article h2 {
-	font-size: 1.28em;
-	padding-left: 0.6em;
-	border-left: 4px solid #111819;
+	font-size: 20px;
 }
 
 #wx-article h3 {
-	font-size: 1.14em;
+	font-size: 17px;
 }
 
 #wx-article h4,
 #wx-article h5,
 #wx-article h6 {
-	font-size: 1em;
+	font-size: 16px;
 }
 
 #wx-article a {
@@ -100,7 +97,7 @@
 	width: 100%;
 	margin: 1.4em 0;
 	border-collapse: collapse;
-	font-size: 0.86em;
+	font-size: 14px;
 }
 
 #wx-article th {
@@ -144,9 +141,7 @@
 	height: auto;
 }
 
-/* SVG 折叠块：上面的 max-width / height:auto 会被内联到组件上。
-   部分 CSS 内联工具会给 <svg> 补 `height: auto`，所以折叠高度写在 height 属性上，
-   脚本 restoreSvgHeight 会把这个 CSS height 去掉；这里只用类名补回裁切与底色。 */
+/* SVG 折叠块：外层只做高度动画与裁切，脚本 restoreSvgHeight 会去除内联的 height:auto */
 #wx-article .wx-fold-outer {
 	display: block;
 	width: 100%;
@@ -163,21 +158,28 @@
 	max-width: 100%;
 }
 
-/* 收起提示与标题行的展开提示呼应：小号、右对齐、方向箭头，不独占大色块。 */
+/* 右下角小巧的「点击收起 ↑」按钮容器，仅按钮本身接收焦点触发 focusout 收起 */
 #wx-article .wx-fold-hint {
 	margin: 0;
-	padding: 0 14px 10px;
+	padding: 4px 12px 10px;
 	text-align: right;
+	background: #f5f7f7;
+}
+
+#wx-article .wx-fold-btn {
+	display: inline-block;
+	padding: 2px 9px;
+	border: 1px solid #c7d1d1;
+	border-radius: 3px;
+	background: #ffffff;
 	font-size: 11px;
 	line-height: 1.5;
 	letter-spacing: 0.02em;
 	color: #007275;
-	background: #f5f7f7;
 	outline: none;
 	-webkit-tap-highlight-color: transparent;
 }
 
-/* 宽度驱动的 SVG 展开：允许 width 动画从 100% 长到 252% */
 #wx-article svg.wx-svg-wide {
 	display: block;
 	width: 100%;
@@ -188,18 +190,15 @@
 #wx-article #footnotes p {
 	display: flex;
 	margin: 0;
-	font-size: 0.86em;
+	font-size: 13px;
 	color: #5d6667;
 }
 
 /* ==========================================================================
-   编辑部风组件（公众号落地层）
-   取值：ink #111819 / muted #5d6667 / rule #c7d1d1 / surface #e8eeee
-         paper #f5f7f7 / accent #007275 / on-accent #f2f7f6 / danger #a91611
-   圆角：块级 6px、行内 3px，与主题既有半径一致。
+   编辑部风组件
    ========================================================================== */
 
-/* 导语：全文唯一的墨青块，只放开头导言 */
+/* 导语：墨青实底 */
 #wx-article .wx-lead {
 	margin: 0 0 40px;
 	padding: 24px;
@@ -210,7 +209,7 @@
 	color: #f2f7f6;
 }
 
-/* 篇章标题：H1，一条墨色底线收住 */
+/* 一级标题（后续篇章）：24px 粗体 + 1px 墨色底线 */
 #wx-article .wx-chapter {
 	margin: 48px 0 24px;
 	padding: 0 0 14px;
@@ -222,7 +221,7 @@
 	color: #111819;
 }
 
-/* 章节标题：24×24 墨青页签 + 20px 标题 */
+/* 二级标题（唯一样式）：24x24px 墨青方块编号 + 20px 粗体标题 */
 #wx-article .wx-h2 {
 	margin: 48px 0 16px;
 	line-height: 24px;
@@ -251,7 +250,7 @@
 	color: #111819;
 }
 
-/* 小节标题：3px 墨色左竖条 */
+/* 三级小节标题：3px 墨色左竖条 + 17px 粗体 */
 #wx-article .wx-h3 {
 	margin: 32px 0 12px;
 	padding: 0 0 0 10px;
@@ -262,7 +261,7 @@
 	color: #111819;
 }
 
-/* 提示块：四种语义，一个形状 */
+/* 提示块：四种语义，浅底 + 左 3px 竖线 + 6px 圆角 */
 #wx-article .wx-box {
 	margin: 24px 0;
 	padding: 14px 16px;
@@ -314,6 +313,40 @@
 	color: #111819;
 }
 
+/* GitHub 仓库引导卡片（浅底 #f5f7f7 + 左 3px #007275 竖线） */
+#wx-article .wx-github-card {
+	margin: 24px 0;
+	padding: 14px 16px;
+	border-left: 3px solid #007275;
+	border-radius: 6px;
+	background: #f5f7f7;
+}
+#wx-article .wx-github-card-label {
+	margin: 0 0 6px;
+	font-size: 10px;
+	line-height: 1.6;
+	font-weight: 500;
+	letter-spacing: 0.18em;
+	color: #007275;
+}
+#wx-article .wx-github-card-repo {
+	margin: 0 0 4px;
+	font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+	font-size: 15px;
+	line-height: 1.7;
+	font-weight: 700;
+	color: #111819;
+	word-break: break-all;
+}
+#wx-article .wx-github-card-url {
+	margin: 0;
+	font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+	font-size: 12px;
+	line-height: 1.6;
+	color: #5d6667;
+	word-break: break-all;
+}
+
 /* 长引 + 出处 */
 #wx-article .wx-quote {
 	margin: 40px 0;
@@ -335,7 +368,7 @@
 	text-align: right;
 }
 
-/* 代码块：不做深色编辑器，统一沿用 NOTE 的浅底、灰竖线与圆角 */
+/* 代码块：浅底 #f5f7f7 + 左 3px #5d6667 竖线 */
 #wx-article .wx-pre {
 	margin: 24px 0;
 	padding: 14px 16px;
@@ -356,7 +389,6 @@
 #wx-article .wx-pre-body {
 	padding: 0;
 }
-/* 不用 <pre>：每行一个 <p>，保留缩进，长行在卡片内换行。 */
 #wx-article .wx-pre-line {
 	margin: 0;
 	font-size: 14px;
@@ -385,7 +417,7 @@
 	color: #5d6667;
 }
 
-/* 文末收束：墨青块已经专属于导语，这里只保留普通正文 */
+/* 文末收束 */
 #wx-article .wx-end {
 	margin: 48px 0 0;
 }
@@ -407,4 +439,48 @@
 	font-size: 13px;
 	line-height: 1.7;
 	color: #5d6667;
+}
+
+/* 模板色板直出条（带真实底色展示色彩规范） */
+#wx-article p.wx-swatch {
+	margin: 8px 0;
+	padding: 10px 14px;
+	border-radius: 6px;
+	font-size: 14px;
+	line-height: 1.5;
+	font-weight: 600;
+}
+#wx-article p.wx-swatch-canvas {
+	background: #ffffff;
+	color: #111819;
+	border: 1px solid #c7d1d1;
+}
+#wx-article p.wx-swatch-paper {
+	background: #f5f7f7;
+	color: #111819;
+	border: 1px solid #c7d1d1;
+}
+#wx-article p.wx-swatch-surface {
+	background: #e8eeee;
+	color: #111819;
+}
+#wx-article p.wx-swatch-rule {
+	background: #c7d1d1;
+	color: #111819;
+}
+#wx-article p.wx-swatch-muted {
+	background: #5d6667;
+	color: #f2f7f6;
+}
+#wx-article p.wx-swatch-ink {
+	background: #111819;
+	color: #f2f7f6;
+}
+#wx-article p.wx-swatch-accent {
+	background: #007275;
+	color: #f2f7f6;
+}
+#wx-article p.wx-swatch-danger {
+	background: #a91611;
+	color: #f2f7f6;
 }

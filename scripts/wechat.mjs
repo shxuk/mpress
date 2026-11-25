@@ -1,60 +1,9 @@
 #!/usr/bin/env node
-
-function getSiteStats(blogRoot) {
-	let totalChars = 0;
-	let runningDays = 12;
-
-	try {
-		const contentDir = blogRoot ? path.join(blogRoot, "content") : "";
-		if (contentDir && fs.existsSync(contentDir)) {
-			function scan(dir) {
-				for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-					const full = path.join(dir, ent.name);
-					if (ent.isDirectory()) { if (!ent.name.includes("backup") && !ent.name.startsWith(".")) scan(full); }
-					else if (/\.(md|mdx)$/i.test(ent.name)) {
-						const raw = fs.readFileSync(full, "utf8");
-						const text = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
-						const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
-						// 仅统计纯中文字符数，精准真实
-						totalChars += cjk;
-					}
-				}
-			}
-			scan(contentDir);
-		}
-	} catch (e) {
-		console.error("统计字数失败:", e);
-	}
-
-	try {
-		const cfgPath = blogRoot ? path.join(blogRoot, "src", "config", "siteConfig.ts") : "";
-		if (cfgPath && fs.existsSync(cfgPath)) {
-			const text = fs.readFileSync(cfgPath, "utf8");
-			const m = text.match(/siteStartDate:\s*["'](\d{4}-\d{2}-\d{2})["']/);
-			if (m) {
-				const start = new Date(m[1]).getTime();
-				runningDays = Math.ceil(Math.abs(Date.now() - start) / 86400000);
-			}
-		}
-	} catch (e) {
-		console.error("统计天数失败:", e);
-	}
-
-	const wordCountLabel = totalChars > 0 ? `${totalChars.toLocaleString()} 字总结` : "151,710 字总结";
-	const statusLabel = `DAY ${runningDays} · 推进中`;
-
-	return { totalChars, wordCountLabel, runningDays, statusLabel };
-}
 /**
  * wechat-publisher 的唯一入口，两个动作：
  *
- *   node scripts/wechat.mjs gen  <任意.md>   固定形态映射 + 内联 HTML + layout.json，不联网
- *   node scripts/wechat.mjs push <任意.md>   生成 + 换图片地址 + 新建/更新草稿
- *
- * 不依赖博客仓库、MCP、npx、npm install：渲染器来自本目录的 vendor/，凭证来自本目录的 credentials。
- * 两者只在私有运行包里存在，Git 仓库里只有源码。
- * 两者都可加 --timing（或 WECHAT_TIMING=1），把每个阶段耗时打到 stderr，产物不变。
- * 失败时只归到一类：凭证 / 白名单 / 图片 / 结构（网络异常单列）。
+ *   node scripts/wechat.mjs gen  <任意.md> [--source-url URL]   固定模板渲染 + 内联 HTML + layout.json
+ *   node scripts/wechat.mjs push <任意.md> [--source-url URL]   渲染 + 换图片地址 + 合成头图 + 新建/更新草稿
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -65,6 +14,20 @@ import { pathToFileURL } from "node:url";
 import MarkdownIt from "markdown-it";
 import juice from "juice";
 
+import {
+	BOX_KINDS,
+	blockHtml,
+	boxHtml,
+	chapterHtml,
+	cjkStrong,
+	codeHtml,
+	compText,
+	figureHtml,
+	githubCardHtml,
+	quoteHtml,
+} from "../components/cards.mjs";
+import { renderSvgFold } from "../components/svg-fold.mjs";
+
 const md = new MarkdownIt({
 	html: true,
 	breaks: true,
@@ -73,6 +36,24 @@ const md = new MarkdownIt({
 
 const SKILL_DIR = path.resolve(import.meta.dirname, "..");
 const CWD = process.cwd();
+
+// 自动加载 .env 配置文件
+const envFile = path.join(SKILL_DIR, ".env");
+if (fs.existsSync(envFile)) {
+	try {
+		if (typeof process.loadEnvFile === "function") {
+			process.loadEnvFile(envFile);
+		} else {
+			for (const line of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
+				const m = line.match(/^\s*(?:export\s+)?([A-Za-z_]\w*)\s*=\s*(.*?)\s*$/);
+				if (m && !process.env[m[1]]) {
+					process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, "$2");
+				}
+			}
+		}
+	} catch {}
+}
+
 // 产物和草稿状态留在仓库外，源码目录保持只读
 const WORK = process.env.WECHAT_WORK_DIR || path.join(os.homedir(), ".wechat-article", "work");
 const STATE_DIR = path.join(WORK, "state");
@@ -140,243 +121,65 @@ const writeJson = (file, value) => {
 	fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 };
 
-// ---------- 生成 ----------
+// ---------- 站点统计（供封面模板使用） ----------
 
-function parseFrontmatter(text) {
-	const data = {};
-	const unquote = (value) =>
-		(value.startsWith('"') && value.endsWith('"')) ||
-		(value.startsWith("'") && value.endsWith("'"))
-			? value.slice(1, -1)
-			: value;
-	const lines = text.split(/\r?\n/);
-	for (let i = 0; i < lines.length; i++) {
-		const kv = lines[i].match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
-		if (!kv) continue;
-		if (kv[2].trim()) {
-			data[kv[1]] = unquote(kv[2].trim());
-			continue;
+function getSiteStats(blogRoot) {
+	let totalChars = 0;
+	let runningDays = 12;
+
+	try {
+		const contentDir = blogRoot ? path.join(blogRoot, "content") : "";
+		if (contentDir && fs.existsSync(contentDir)) {
+			function scan(dir) {
+				for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+					const full = path.join(dir, ent.name);
+					if (ent.isDirectory()) {
+						if (!ent.name.includes("backup") && !ent.name.startsWith(".")) scan(full);
+					} else if (/\.(md|mdx)$/i.test(ent.name)) {
+						const raw = fs.readFileSync(full, "utf8");
+						const text = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+						const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+						totalChars += cjk;
+					}
+				}
+			}
+			scan(contentDir);
 		}
-		// book 文章把封面写在 banner 下：banner:\n  image: "../banners/x.jpg"
-		const nested = {};
-		while (i + 1 < lines.length) {
-			const child = lines[i + 1].match(/^\s{1,}([A-Za-z_][\w-]*):\s*(.*)$/);
-			if (!child) break;
-			i++;
-			if (child[2].trim()) nested[child[1]] = unquote(child[2].trim());
+	} catch (e) {
+		console.error("统计字数失败:", e);
+	}
+
+	let brand = "";
+	try {
+		const cfgPath = blogRoot ? path.join(blogRoot, "src", "config", "siteConfig.ts") : "";
+		if (cfgPath && fs.existsSync(cfgPath)) {
+			const text = fs.readFileSync(cfgPath, "utf8");
+			const m = text.match(/siteStartDate:\s*["'](\d{4}-\d{2}-\d{2})["']/);
+			if (m) {
+				const start = new Date(m[1]).getTime();
+				runningDays = Math.ceil(Math.abs(Date.now() - start) / 86400000);
+			}
+			const t = text.match(/^\s*title:\s*["']([^"']+)["']/m);
+			if (t) brand = t[1].trim();
 		}
-		if (Object.keys(nested).length) data[kv[1]] = nested;
+	} catch (e) {
+		console.error("统计天数失败:", e);
 	}
-	return data;
+
+	const wordCountLabel = totalChars > 0 ? `${totalChars.toLocaleString()} 字总结` : "151,710 字总结";
+	const statusLabel = `DAY ${runningDays} · 推进中`;
+	return { totalChars, wordCountLabel, runningDays, statusLabel, brand };
 }
 
-function resolveAsset(src, sourcePath) {
-	if (!src || /^(https?:|data:)/i.test(src)) return src;
-	if (src.startsWith("/") && !BLOG_ROOT) {
-		fail(
-			"图片",
-			`站内图片需要站点根目录：${src}`,
-			"设 BLOG_ROOT 指向仓库根，或把图片改成相对源稿的路径",
-		);
-	}
-	const local = src.startsWith("/")
-		? path.join(BLOG_ROOT, "public", src)
-		: path.resolve(path.dirname(sourcePath), decodeURIComponent(src));
-	if (!fs.existsSync(local)) {
-		fail("图片", `找不到图片：${src}`, `期望路径 ${local}`);
-	}
-	return local;
-}
+// ---------- Markdown 固定映射（唯一模板规则） ----------
 
-// ---------- 折叠块：```fold 标题｜摘要 → 两层 SVG ----------
-
-const FOLD_TEMPLATE = path.join(SKILL_DIR, "assets", "wechat-svg-fold.html");
-const FOLD_W = 686;
-const FOLD_CHARS = 23;
-const NO_LINE_START = "，。、；：？！）」』】》”’%";
-
-let foldTemplate = "";
-
-const xml = (s) =>
-	s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-// 作者会用 &lt;details&gt; 这种实体避开 HTML 解析，展开成组件时要先还原再转义
-const decode = (s) =>
-	s
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, '"')
-		.replace(/&#39;/g, "'")
-		.replace(/&nbsp;/g, " ")
-		.replace(/&amp;/g, "&");
-
-const charWidth = (ch) => (/[\x00-\xff]/.test(ch) ? 0.5 : 1);
-
-function wrapLines(text) {
-	const lines = [];
-	let line = "";
-	let width = 0;
-	for (const ch of [...text]) {
-		if (width + charWidth(ch) > FOLD_CHARS && line && !NO_LINE_START.includes(ch)) {
-			lines.push(line);
-			line = "";
-			width = 0;
-		}
-		line += ch;
-		width += charWidth(ch);
-	}
-	if (line) lines.push(line);
-	return lines;
-}
-
-/** 折叠块内只渲染纯文本：链接降级为「文字（地址）」，去掉强调记号与引用箭头，列表符号保留 */
-const foldPlain = (line) =>
-	line
-		.trim()
-		.replace(/^>\s?/, "")
-		.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (_, text, url) =>
-			text.trim() === url.trim() ? url.trim() : `${text.trim()}（${url.trim()}）`,
-		)
-		.replace(/\*\*(.+?)\*\*/g, "$1")
-		.replace(/`([^`]*)`/g, "$1");
-
-function foldHtml(title, summary, body, { keepLines = false } = {}) {
-	if (!foldTemplate) {
-		// 空行会截断 Markdown 的 HTML 块，模板里的空行必须去掉
-		foldTemplate = fs
-			.readFileSync(FOLD_TEMPLATE, "utf8")
-			.replace(/<!--[\s\S]*?-->/g, "")
-			.split(/\r?\n/)
-			.filter((line) => line.trim())
-			.join("\n");
-	}
-	const lines = keepLines
-		? body
-				.split(/\r?\n/)
-				.map(foldPlain)
-				.filter(Boolean)
-				.flatMap(wrapLines)
-		: body
-				.split(/\n{2,}/)
-				.map((p) => p.split(/\r?\n/).map(foldPlain).join(""))
-				.filter(Boolean)
-				.flatMap(wrapLines);
-	if (!lines.length) fail("结构", "fold 块没有正文", "在 ```fold 标题｜摘要 下面写内容");
-
-	// details 没有摘要：收起态只留一行标题 + 右侧展开提示；fold 有摘要时才多留一行。
-	const firstY = summary ? 142 : 106;
-	const lineHeight = 44;
-	const collapsedHeight = summary ? 100 : 64;
-	const viewBoxH = firstY + (lines.length - 1) * lineHeight + 30;
-	const expandedVw = ((viewBoxH / FOLD_W) * 100 * 0.92).toFixed(1);
-	const collapsedVw = ((collapsedHeight / FOLD_W) * 100 * 0.92).toFixed(1);
-	const bodyLines = lines
-		.map(
-			(line, i) =>
-				`<text x="24" y="${firstY + i * lineHeight}" font-size="27" fill="#111819" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif">${xml(line)}</text>`,
-		)
-		.join("\n");
-	const summaryLine = summary
-		? `<text x="24" y="84" font-size="24" fill="#5d6667" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif">${xml(summary)}</text>`
-		: "";
-
-	return foldTemplate
-		.replaceAll("{{COLLAPSED_VW}}", collapsedVw)
-		.replaceAll("{{EXPANDED_VW}}", expandedVw)
-		.replaceAll("{{VIEWBOX_W}}", String(FOLD_W))
-		.replaceAll("{{VIEWBOX_H}}", String(viewBoxH))
-		.replaceAll("{{TITLE}}", xml(title))
-		.replaceAll("{{EXPAND_LABEL}}", "点击展开 ↓")
-		.replace("{{SUMMARY_LINE}}", summaryLine)
-		.replace("{{BODY_LINES}}", bodyLines)
-		.split(/\r?\n/)
-		.filter((line) => line.trim())
-		.join("\n");
-}
-
-// ---------- 作者层 Markdown → 内联 HTML 组件 ----------
-
-const BOX_KINDS = { TIP: "tip", NOTE: "note", WARNING: "warning", IMPORTANT: "important" };
-
-/** `**加粗**` 紧跟中文时不是合法闭合（CommonMark），这里补成 <strong> */
-function cjkStrong(text) {
-	return text
-		.split(/(`[^`]*`)/)
-		.map((part, i) =>
-			i % 2
-				? part
-				: part.replace(
-						/\*\*(?!\s)([^*\n]*?[^\s*])\*\*(?=[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef])/g,
-						"<strong>$1</strong>",
-					),
-		)
-		.join("");
-}
-
-/** 组件内的文本：先还原本体，再转义，再补 <strong> */
-const compText = (s) => cjkStrong(xml(decode(s)));
-
-function boxHtml(kind, bodyLines, title = "") {
-	const label = Object.keys(BOX_KINDS).find((k) => BOX_KINDS[k] === kind);
-	const body = bodyLines
-		.join("\n")
-		.split(/\n{2,}/)
-		.map((p) => p.replace(/\s*\n\s*/g, "").trim())
-		.filter(Boolean)
-		.map((p) => `<p class="wx-box-body">${compText(p)}</p>`)
-		.join("\n");
-	const heading = title ? `<p class="wx-box-title">${compText(title)}</p>\n` : "";
-	return `<section class="wx-box wx-box-${kind}"><p class="wx-box-label">${label}</p>\n${heading}${body}</section>`;
-}
-
-function quoteHtml(paragraphs, source) {
-	const body = paragraphs
-		.join("\n")
-		.split(/\n{2,}/)
-		.map((p) => p.replace(/\s*\n\s*/g, "").trim())
-		.filter(Boolean)
-		.map((p) => `<p class="wx-quote-text">${compText(p)}</p>`)
-		.join("\n");
-	return `<section class="wx-quote">\n${body}\n<p class="wx-quote-source">${xml(source)}</p>\n</section>`;
-}
-
-function codeHtml(lang, lines) {
-	const label = lang ? `<p class="wx-pre-lang">${xml(lang.toUpperCase())}</p>\n` : "";
-	const body = lines.map((line) => `<p class="wx-pre-line">${xml(line)}</p>`).join("\n");
-	return `<section class="wx-pre">\n${label}<section class="wx-pre-body">\n${body}\n</section>\n</section>`;
-}
-
-function figureHtml(alt, src, caption) {
-	const figure = `<section class="wx-figure"><img src="${xml(src)}" alt="${xml(alt)}"></section>`;
-	return caption ? `${figure}\n<p class="wx-caption">${compText(caption)}</p>` : figure;
-}
-
-function chapterHtml(no, text, isFirst = false) {
-	const style = isFirst ? ' style="margin-top: 8px;"' : '';
-	return `<section class="wx-h2"${style}><span class="wx-h2-no">${xml(no)}</span><span class="wx-h2-text">${compText(text)}</span></section>`;
-}
-
-function blockHtml(cls, textCls, lines) {
-	const text = lines.join(" ").replace(/\s+/g, " ").trim();
-	const p = textCls ? `<p class="${textCls}">` : "<p>";
-	return `<section class="${cls}">${p}${compText(text)}</p></section>`;
-}
-
-const PLAIN_SKIP = /^(?:[-*+]\s|\d+\.\s|\||>|#|!\[|---|___|\*\*\*)/;
-
-/**
- * 把作者写得出的 Markdown 组件展开成主题的 wx-* 结构，交给内置 juice 引擎内联样式。
- * 规则固定这一套，不再扩展。
- */
 function expandComponents(body) {
 	const lines = body.split(/\r?\n/);
 	const out = [];
 	const mappings = [];
 	let h2Counter = 1;
-	const mapped = (rule, line) => mappings.push({ line: line + 1, rule });
-	const hasChapter = /^#\s+\S/m.test(body);
 	let seenChapter = false;
-	let leadDone = !hasChapter;
+	const mapped = (rule, line) => mappings.push({ line: line + 1, rule });
 
 	const gap = () => {
 		if (out.length && out[out.length - 1] !== "") out.push("");
@@ -384,6 +187,7 @@ function expandComponents(body) {
 
 	for (let i = 0; i < lines.length; ) {
 		let line = lines[i];
+
 		// 链接包图片 [![alt](src)](href)：微信会剥掉 <a>，只保留图片，否则渲染出乱码
 		const withoutLink = line.replace(/\[(!\[[^\]]*\]\([^)\s]+\))\]\([^)\s]+\)/g, "$1");
 		if (withoutLink !== line) {
@@ -391,11 +195,26 @@ function expandComponents(body) {
 			line = withoutLink;
 		}
 
-		// 站点容器：:::tip[标题] / :::details[标题]，闭合行为单独的 :::
-		const container = line.match(/^:::([A-Za-z]+)(?:\[(.*)\])?\s*$/);
+		// 容器：::: githubcard / ::: details / ::: tip|note|warning|important|caution
+		const container = line.match(/^:::\s*([A-Za-z][A-Za-z0-9_-]*)(?:\[(.*?)\])?(?:\s+(.*?))?\s*$/);
 		if (container) {
 			const kind = container[1].toLowerCase();
-			const title = (container[2] || "").trim();
+			const bracketArg = (container[2] || "").trim();
+			const restArg = (container[3] || "").trim();
+			const hasTrailingColons = /\s*:::$/.test(restArg) || restArg === ":::";
+			const cleanRest = restArg.replace(/\s*:::$/, "").trim();
+			const argText = bracketArg || cleanRest;
+			const openLine = i;
+
+			if (kind === "githubcard" && hasTrailingColons) {
+				mapped("container:githubcard", openLine);
+				i++;
+				gap();
+				out.push(githubCardHtml(argText));
+				out.push("");
+				continue;
+			}
+
 			const buf = [];
 			let j = i + 1;
 			while (j < lines.length && lines[j].trim() !== ":::") {
@@ -403,37 +222,43 @@ function expandComponents(body) {
 				j++;
 			}
 			if (j >= lines.length) fail("结构", "::: 容器没有闭合", "补一行单独的 :::");
-			const openLine = i;
 			i = j + 1;
-			if (kind === "details") {
-				mapped("container:details", openLine);
-				// Astro 的 :::details 是作者显式折叠，标题照抄，正文按行保留
+
+			if (kind === "githubcard") {
+				mapped("container:githubcard", openLine);
 				gap();
-				out.push(foldHtml(title, "", buf.join("\n"), { keepLines: true }));
+				out.push(githubCardHtml(argText || buf.join(" ").trim()));
 				out.push("");
 				continue;
 			}
+
+			if (kind === "details") {
+				mapped("container:details", openLine);
+				gap();
+				out.push(renderSvgFold(buf.join("\n"), fail));
+				out.push("");
+				continue;
+			}
+
 			if (kind === "caution" || BOX_KINDS[kind.toUpperCase()]) {
 				const boxKind = kind === "caution" ? "warning" : BOX_KINDS[kind.toUpperCase()];
 				mapped(`container:${kind}`, openLine);
 				gap();
-				out.push(boxHtml(boxKind, buf, title));
+				out.push(boxHtml(boxKind, buf, argText));
 				out.push("");
 				continue;
 			}
-			// 未知容器不猜语义：整块原样交回原生 Markdown
+
 			out.push(line);
 			out.push(...buf);
 			out.push(":::");
-			i = j + 1;
 			continue;
 		}
 
-		// 围栏：fold / end / sign / mermaid / 普通代码
+		// 围栏：end / sign / mermaid / 普通代码
 		const fence = line.match(/^```([A-Za-z0-9_-]+)?(?:\s+(.*))?$/);
 		if (fence) {
 			const lang = (fence[1] || "").toLowerCase();
-			const meta = (fence[2] || "").trim();
 			const buf = [];
 			let j = i + 1;
 			while (j < lines.length && !/^```\s*$/.test(lines[j])) {
@@ -444,11 +269,7 @@ function expandComponents(body) {
 			mapped(`fence:${lang || "code"}`, i);
 			i = j + 1;
 			gap();
-			if (lang === "fold") {
-				const [title, ...rest] = meta.split("｜");
-				if (!title) fail("结构", "fold 块缺少标题", "写成 ```fold 标题｜摘要");
-				out.push(foldHtml(title.trim(), rest.join("｜").trim(), buf.join("\n")));
-			} else if (lang === "end") {
+			if (lang === "end") {
 				out.push(blockHtml("wx-end", "wx-end-text", buf));
 			} else if (lang === "sign") {
 				out.push(blockHtml("wx-sign", "", buf));
@@ -461,7 +282,7 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 引用块：提示块（关键词后可跟粗标题）/ 长引（出处以 —— 开头）/ 普通引用
+		// 引用块：提示块 / 长引（出处以 —— 开头）/ 普通引用
 		if (/^>/.test(line)) {
 			const buf = [];
 			let j = i;
@@ -482,7 +303,6 @@ function expandComponents(body) {
 			} else if (isLongQuote) {
 				out.push(quoteHtml(buf.slice(0, -1), buf[buf.length - 1].trim()));
 			} else {
-				// 不再提供独立短引样式，普通引用按正文段落输出。
 				const paragraphs = buf
 					.join("\n")
 					.split(/\n{2,}/)
@@ -494,7 +314,7 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 标题：首个 H1 在公众号正文剥除，避免与微信自带大标题重复
+		// 一级标题：首个 H1 在公众号正文剥除，后续 H1 为篇章标题
 		const h1 = line.match(/^#\s+(.+)$/);
 		if (h1) {
 			if (!seenChapter) {
@@ -510,23 +330,28 @@ function expandComponents(body) {
 			i++;
 			continue;
 		}
+
+		// 二级标题（唯一样式）：全部输出墨青色正方形数字页签（01、02...）
 		const h2Match = line.match(/^##\s+(?:(\d{1,2})\s+)?(\S.*)$/);
 		if (h2Match) {
 			mapped("chapter-tab", i);
 			gap();
 			let no = h2Match[1];
-			let titleText = h2Match[2].trim();
+			const titleText = h2Match[2].trim();
 			if (no) {
 				no = String(parseInt(no, 10)).padStart(2, "0");
 				h2Counter = parseInt(no, 10) + 1;
 			} else {
 				no = String(h2Counter++).padStart(2, "0");
 			}
-			out.push(chapterHtml(no, titleText, out.length === 0 || (out.length === 1 && out[0] === "")));
+			const isFirst = out.length === 0 || (out.length === 1 && out[0] === "");
+			out.push(chapterHtml(no, titleText, isFirst));
 			out.push("");
 			i++;
 			continue;
 		}
+
+		// 三级标题：3px 墨色左竖线小节标题
 		const h3 = line.match(/^###\s+(.+)$/);
 		if (h3) {
 			mapped("heading-3", i);
@@ -551,25 +376,92 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 导语：不再强制自动加 wx-lead 绿框，保持纯正文
-
 		if (line.trim()) mapped("native", i);
 		out.push(cjkStrong(line));
 		i++;
 	}
+
 	return { body: out.join("\n"), mappings };
 }
 
+// ---------- 源稿解析与产物构建 ----------
 
-/**
- * 产物只允许落在 WORK 下。
- * 源稿只读：脚本对源稿只做 readFile，不写、不建目录。
- */
+function parseFrontmatter(text) {
+	const data = {};
+	const unquote = (value) =>
+		(value.startsWith('"') && value.endsWith('"')) ||
+		(value.startsWith("'") && value.endsWith("'"))
+			? value.slice(1, -1)
+			: value;
+	const parseInlineList = (raw) =>
+		raw
+			.slice(1, -1)
+			.split(",")
+			.map((item) => unquote(item.trim()))
+			.filter(Boolean);
+	const lines = text.split(/\r?\n/);
+	for (let i = 0; i < lines.length; i++) {
+		const kv = lines[i].match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+		if (!kv) continue;
+		const val = kv[2].trim();
+		if (val) {
+			data[kv[1]] = /^\[.*\]$/.test(val) ? parseInlineList(val) : unquote(val);
+			continue;
+		}
+		const nested = {};
+		const list = [];
+		while (i + 1 < lines.length) {
+			const item = lines[i + 1].match(/^\s*-\s+(.*)$/);
+			if (item) {
+				i++;
+				if (item[1].trim()) list.push(unquote(item[1].trim()));
+				continue;
+			}
+			const child = lines[i + 1].match(/^\s{1,}([A-Za-z_][\w-]*):\s*(.*)$/);
+			if (!child) break;
+			i++;
+			if (child[2].trim()) nested[child[1]] = unquote(child[2].trim());
+		}
+		if (list.length) data[kv[1]] = list;
+		else if (Object.keys(nested).length) data[kv[1]] = nested;
+	}
+	return data;
+}
+
+function resolveAsset(src, sourcePath) {
+	if (!src || /^(https?:|data:)/i.test(src)) return src;
+	if (src.startsWith("/") && !BLOG_ROOT) {
+		fail(
+			"图片",
+			`站内图片需要站点根目录：${src}`,
+			"设 BLOG_ROOT 指向仓库根，或把图片改成相对源稿的路径",
+		);
+	}
+	const local = src.startsWith("/")
+		? path.join(BLOG_ROOT, "public", src)
+		: path.resolve(path.dirname(sourcePath), decodeURIComponent(src));
+	if (!fs.existsSync(local)) {
+		fail("图片", `找不到图片：${src}`, `期望路径 ${local}`);
+	}
+	return local;
+}
+
 function assertWritable(target) {
 	const workRel = path.relative(WORK, target);
 	if (!workRel || workRel.startsWith("..") || path.isAbsolute(workRel)) {
 		fail("结构", `产物目录越界：${target}`, "slug 不能指向上级目录");
 	}
+}
+
+function bookTitleOf(abs) {
+	if (!BLOG_ROOT) return "";
+	const rel = path.relative(path.join(BLOG_ROOT, "content", "books"), abs);
+	if (rel.startsWith("..") || path.isAbsolute(rel)) return "";
+	const name = rel.split(path.sep)[0];
+	const index = path.join(BLOG_ROOT, "content", "books", `${name}.md`);
+	if (!fs.existsSync(index)) return "";
+	const fm = fs.readFileSync(index, "utf8").match(/^---\r?\n([\s\S]*?)\r?\n---/);
+	return fm ? (parseFrontmatter(fm[1]).title || "").trim() : "";
 }
 
 function buildArticle(source, sourceUrl) {
@@ -583,7 +475,7 @@ function buildArticle(source, sourceUrl) {
 	if (!fs.existsSync(abs)) {
 		fail("结构", `源文件不存在：${abs}`, "路径按当前目录解析，例如 ./文章.md");
 	}
-	// 站内稿按 content/ 之后的相对路径做 slug，避免跨章同名；其他位置用文件名
+
 	const contentRoot = BLOG_ROOT ? path.join(BLOG_ROOT, "content") : "";
 	if (!sourceUrl && contentRoot) {
 		const rel = path.relative(contentRoot, abs).replace(/\\/g, "/");
@@ -596,6 +488,7 @@ function buildArticle(source, sourceUrl) {
 			}
 		}
 	}
+
 	let sourceRel = path.basename(abs);
 	let slug = path.basename(abs, path.extname(abs));
 	if (contentRoot) {
@@ -612,8 +505,6 @@ function buildArticle(source, sourceUrl) {
 	const data = parseFrontmatter(fm?.[1] || "");
 	let body = fm ? raw.slice(fm[0].length) : raw;
 
-	// 标题：frontmatter → 首个 H1 → 文件名，保证独立文稿不用先补 frontmatter
-	// 必须在组件展开前取，展开后 H1 已经变成 wx-chapter 结构
 	let title = (data.title || "").trim();
 	if (!title) {
 		const h1 = body.match(/^#\s+(.+)$/m);
@@ -632,10 +523,8 @@ function buildArticle(source, sourceUrl) {
 		(_, head, src, tail) => head + resolveAsset(src, abs) + tail,
 	);
 
-	// 标题：frontmatter → 首个 H1 → 文件名，保证独立文稿不用先补 frontmatter
 	if (!title) title = path.basename(abs, path.extname(abs));
 
-	// 封面：frontmatter.image → banner.image → 正文第一张本地图 → 内置默认封面
 	let cover = resolveAsset((data.image || data.banner?.image || "").trim(), abs);
 	if (!cover) {
 		const first = body.match(/!\[[^\]]*\]\(([^)\s]+)\)/) || body.match(/<img\b[^>]*?\bsrc=["']([^"']+)["']/i);
@@ -644,10 +533,11 @@ function buildArticle(source, sourceUrl) {
 	if (!cover && fs.existsSync(DEFAULT_COVER)) cover = DEFAULT_COVER;
 	if (!cover) fail("图片", "没有封面，正文里也没有本地图片", "在 assets/default-cover.png 放一张默认封面");
 
-	// 头图文案：两层（标题 + 摘要），书稿再加第三层书名
 	const summary = (data.description || data.summary || data.digest || "").trim();
 	const book = (data.banner?.book || data.book || bookTitleOf(abs) || "").trim();
-	// 底图必须无字：优先 banner.image（书稿插画），其次运行包内置底图；封面图常带字，不作底图
+	const tags = Array.isArray(data.tags) ? data.tags : data.tags ? [String(data.tags)] : [];
+	const category = (data.category || "").trim();
+	const seriesOrder = (data.seriesOrder || "").trim();
 	const headBase = process.env.WECHAT_HEAD_BASE
 		? path.resolve(CWD, process.env.WECHAT_HEAD_BASE)
 		: resolveAsset((data.banner?.image || "").trim(), abs) ||
@@ -693,27 +583,27 @@ function buildArticle(source, sourceUrl) {
 		mermaid,
 	});
 
-	return { abs, dir, slug, title, cover, headBase, summary, book, sourceUrl, images, inlineSvg, mermaid };
+	return {
+		abs,
+		dir,
+		slug,
+		title,
+		cover,
+		headBase,
+		summary,
+		book,
+		tags,
+		category,
+		seriesOrder,
+		sourceUrl,
+		images,
+		inlineSvg,
+		mermaid,
+	};
 }
 
-/** 书稿第三层用书名：content/books/<name>/ 下的文章读 content/books/<name>.md 的 title */
-function bookTitleOf(abs) {
-	if (!BLOG_ROOT) return "";
-	const rel = path.relative(path.join(BLOG_ROOT, "content", "books"), abs);
-	if (rel.startsWith("..") || path.isAbsolute(rel)) return "";
-	const name = rel.split(path.sep)[0];
-	const index = path.join(BLOG_ROOT, "content", "books", `${name}.md`);
-	if (!fs.existsSync(index)) return "";
-	const fm = fs.readFileSync(index, "utf8").match(/^---\r?\n([\s\S]*?)\r?\n---/);
-	return fm ? (parseFrontmatter(fm[1]).title || "").trim() : "";
-}
+// ---------- 样式内联与链接检查 ----------
 
-
-/**
- * CSS 内联引擎有时会给 svg 补一条 `height: auto`，它会压住 height 属性，
- * 也会压住 SMIL 对 height 的动画。带长度 height 的 svg 必须把 CSS height 去掉。
- * 长度可以是纯数字、px、vw 或百分比——折叠块用的是 vw。
- */
 function restoreSvgHeight(html) {
 	return html.replace(/<svg\b[^>]*>/gi, (tag) => {
 		if (!/\bheight="(?:\d+(?:\.\d+)?(?:px|vw|%)?)"/i.test(tag)) return tag;
@@ -727,11 +617,6 @@ function restoreSvgHeight(html) {
 	});
 }
 
-/**
- * 微信拒收草稿里的站内相对链接（45166 invalid content）。
- * 站点域名优先读 WECHAT_SITE_URL；只有设了 BLOG_ROOT 才回退到它的 siteConfig.ts。
- * 两者都没有时返回空串，站内链接会在 checkLinkForms 里被拦下并提示。
- */
 function siteUrl() {
 	if (process.env.WECHAT_SITE_URL) return process.env.WECHAT_SITE_URL.replace(/\/+$/, "");
 	if (!BLOG_ROOT) return "";
@@ -746,19 +631,13 @@ function siteUrl() {
 	return matched ? matched[1].replace(/\/+$/, "") : "";
 }
 
-/** 只处理 <a href="/...">：绝对地址、协议相对地址、锚点、mailto 都不动。 */
-function absolutizeLinks(html, siteUrl) {
+function absolutizeLinks(html, url) {
 	return html.replace(
 		/(<a\b[^>]*?\bhref\s*=\s*)(["'])\/(?!\/)([^"']*)\2/gi,
-		(_, head, quote, rest) => `${head}${quote}${siteUrl}/${rest}${quote}`,
+		(_, head, quote, rest) => `${head}${quote}${url}/${rest}${quote}`,
 	);
 }
 
-/**
- * 实测微信 draft/add：href="/..."、href="#锚点"、mp.weixin.qq.com 都会 45166，必须本地拦下。
- * 其余非标准形态（无前导斜杠的相对路径、//host、javascript:、空 href）能提交，
- * 但微信保存时会剥成纯文字，因此只提示、不阻断。
- */
 function checkLinkForms(html) {
 	const fatal = [];
 	const soft = [];
@@ -791,23 +670,20 @@ function checkLinkForms(html) {
 		);
 	}
 	if (soft.length) {
-		console.error(
-			`提示：微信会把以下链接剥成纯文字，读者无法点击：${soft.slice(0, 5).join("；")}`,
-		);
+		console.error(`提示：微信会把以下链接剥成纯文字，读者无法点击：${soft.slice(0, 5).join("；")}`);
 	}
 }
 
-// 自研轻量内联渲染器：原生 MarkdownIt + Juice，无需外部 CLI 子进程
 function renderArticle(built) {
 	const mdPath = path.join(built.dir, "article.md");
 	if (!fs.existsSync(mdPath)) {
 		fail("结构", `文章源文件不存在：${mdPath}`, "请检查生成流程");
 	}
-	const mdContent = fs.readFileSync(mdPath, "utf8");
+	const rawFile = fs.readFileSync(mdPath, "utf8");
+	const mdContent = rawFile.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, "");
 	const rawHtml = md.render(mdContent);
 	const themeCss = fs.existsSync(THEME) ? fs.readFileSync(THEME, "utf8") : "";
 
-	// 注入根容器并执行样式内联
 	const wrappedHtml = `<section class="wx-article-root" id="wx-article">\n${rawHtml}\n</section>`;
 	let inlinedHtml = wrappedHtml;
 	try {
@@ -836,20 +712,22 @@ const HEAD_H = 766;
 const esc = (s) =>
 	String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const CHROME_CANDIDATES =
+const BROWSER_CANDIDATES =
 	process.platform === "win32"
 		? [
 				"C:/Program Files/Google/Chrome/Application/chrome.exe",
 				"C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+				"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+				"C:/Program Files/Microsoft/Edge/Application/msedge.exe",
 			]
 		: process.platform === "darwin"
 			? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
 			: ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
 
-function chromePath() {
+function browserCandidates() {
 	const pinned = process.env.WECHAT_CHROME;
-	if (pinned) return fs.existsSync(pinned) ? pinned : "";
-	return CHROME_CANDIDATES.find((file) => fs.existsSync(file)) || "";
+	if (pinned) return fs.existsSync(pinned) ? [pinned] : [];
+	return BROWSER_CANDIDATES.filter((file) => fs.existsSync(file));
 }
 
 async function localizeBase(base, dir) {
@@ -861,10 +739,6 @@ async function localizeBase(base, dir) {
 	return file;
 }
 
-/**
- * 站点头图规格搬到 1800×766：四边安全区各 8%，压 58% 墨青保证白字可读，文字只占左侧。
- * 标题超长先缩字号（79 → 34px），仍放不下再截断到三行；摘要超长由页面自然折行。
- */
 function headHtml(base, { title, summary, book }) {
 	const pad = Math.round(HEAD_W * 0.08);
 	const unit = (v) => Math.round(HEAD_W * v);
@@ -913,19 +787,50 @@ async function buildHeadImage(built) {
 	const tplName = tplChoice === "b" ? "template-b.html" : tplChoice === "c" ? "template-c.html" : "template-a.html";
 	const tplPath = path.join(SKILL_DIR, "templates", tplName);
 
-	const tag = (built.tags && built.tags[0]) || (built.category) || "ESSAY · 观点";
+	const tag = (built.tags && built.tags[0]) || built.category || "ESSAY · 观点";
 	const now = new Date();
-	const issueDate = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}`;
-	const issue = `ISSUE // ${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
+	const year = String(now.getFullYear());
+	const issueDate = `${year}.${String(now.getMonth() + 1).padStart(2, "0")}`;
+	const issue = `ISSUE // ${year}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
 
 	const siteStats = getSiteStats(BLOG_ROOT);
+	const brand = process.env.WECHAT_BRAND || siteStats.brand || "BRAND";
+	const brandUpper = brand.toUpperCase();
+	const coverAuthor = AUTHOR || brand;
+	let siteDomain = process.env.WECHAT_SITE_DOMAIN || "";
+	if (!siteDomain) {
+		try {
+			const u = siteUrl();
+			if (u) siteDomain = new URL(u).hostname;
+		} catch {}
+	}
+	if (!siteDomain) siteDomain = "example.com";
+
+	const isBook = Boolean(built.book);
+	const spineText = isBook ? `${brandUpper} · 专著` : `${brandUpper} · 散篇`;
+	const eyebrow = isBook ? `BOOK · ${built.book}` : "PERSPECTIVE · 思考与观察";
+	const issueNo =
+		process.env.WECHAT_ISSUE ||
+		(built.seriesOrder ? `CH. ${String(built.seriesOrder).padStart(2, "0")}` : `NO. ${String(now.getMonth() + 1).padStart(2, "0")}`);
+	const footerSlogan = isBook ? "独立博客 · 专栏书稿连载" : "独立博客 · 深度长文阅读";
+
 	let html = "";
 	if (fs.existsSync(tplPath)) {
-		html = fs.readFileSync(tplPath, "utf8")
+		html = fs
+			.readFileSync(tplPath, "utf8")
 			.replaceAll("{{TITLE}}", esc(built.title))
 			.replaceAll("{{TAG}}", esc(tag))
 			.replaceAll("{{ISSUE}}", esc(issue))
 			.replaceAll("{{ISSUE_DATE}}", esc(issueDate))
+			.replaceAll("{{YEAR}}", esc(year))
+			.replaceAll("{{BRAND}}", esc(brand))
+			.replaceAll("{{BRAND_UPPER}}", esc(brandUpper))
+			.replaceAll("{{AUTHOR}}", esc(coverAuthor))
+			.replaceAll("{{SITE_DOMAIN}}", esc(siteDomain))
+			.replaceAll("{{SPINE_TEXT}}", esc(spineText))
+			.replaceAll("{{EYEBROW}}", esc(eyebrow))
+			.replaceAll("{{ISSUE_NO}}", esc(issueNo))
+			.replaceAll("{{FOOTER_SLOGAN}}", esc(footerSlogan))
 			.replaceAll("{{WORD_COUNT_LABEL}}", esc(siteStats.wordCountLabel))
 			.replaceAll("{{STATUS_LABEL}}", esc(siteStats.statusLabel));
 	} else {
@@ -935,42 +840,48 @@ async function buildHeadImage(built) {
 
 	const htmlPath = path.join(built.dir, "head.html");
 	const pngPath = path.join(built.dir, "head-1800x766.png");
+	if (fs.existsSync(pngPath)) fs.unlinkSync(pngPath);
 	fs.writeFileSync(htmlPath, html, "utf8");
 
-	const chrome = chromePath();
-	if (!chrome) {
-		fail("结构", "找不到 Chrome，无法生成头图", "安装 Chrome，或用 WECHAT_CHROME 指向可执行文件");
+	const browsers = browserCandidates();
+	if (!browsers.length) {
+		fail("结构", "找不到 Chrome 或 Edge，无法生成头图", "安装 Chrome/Edge，或用 WECHAT_CHROME 指向可执行文件");
 	}
-	const profile = fs.mkdtempSync(path.join(os.tmpdir(), "wechat-head-"));
-	const run = spawnSync(
-		chrome,
-		[
-			"--headless=new",
-			"--disable-gpu",
-			"--no-sandbox",
-			"--hide-scrollbars",
-			"--force-device-scale-factor=1",
-			`--window-size=${HEAD_W},${HEAD_H}`,
-			"--virtual-time-budget=5000",
-			`--user-data-dir=${profile}`,
-			`--screenshot=${pngPath}`,
-			pathToFileURL(htmlPath).href,
-		],
-		{ encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
-	);
-	fs.rmSync(profile, { recursive: true, force: true });
+
+	let lastStderr = "";
+	for (const browser of browsers) {
+		const profile = fs.mkdtempSync(path.join(os.tmpdir(), "wechat-head-"));
+		const run = spawnSync(
+			browser,
+			[
+				"--headless=new",
+				"--disable-gpu",
+				"--no-sandbox",
+				"--hide-scrollbars",
+				"--force-device-scale-factor=1",
+				`--window-size=${HEAD_W},${HEAD_H}`,
+				"--virtual-time-budget=5000",
+				`--user-data-dir=${profile}`,
+				`--screenshot=${pngPath}`,
+				pathToFileURL(htmlPath).href,
+			],
+			{ encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
+		);
+		fs.rmSync(profile, { recursive: true, force: true });
+		if (fs.existsSync(pngPath)) break;
+		lastStderr = (run.stderr || "").trim().split(/\r?\n/).slice(-3).join(" ");
+	}
 
 	if (!fs.existsSync(pngPath)) {
-		const tail = (run.stderr || "").trim().split(/\r?\n/).slice(-3).join(" ");
-		fail("结构", "头图没有生成", tail || "检查 Chrome 是否可执行");
+		fail("结构", "头图没有生成", lastStderr || "检查 Chrome / Edge 是否可执行");
 	}
-	// 自动裁剪 1:1 正方形头图（聚焦右侧规格数据卡片与水印，尺寸 500x500）
+
 	const squarePngPath = path.join(built.dir, "head-square-500x500.png");
 	const squareStdPath = path.join(built.dir, "head-square.png");
 	try {
 		spawnSync("python3", [
 			"-c",
-			`from PIL import Image; im = Image.open('${pngPath}'); crop = im.crop((1280, 50, 1780, 550)); crop.save('${squarePngPath}'); crop.save('${squareStdPath}')`
+			`from PIL import Image; im = Image.open('${pngPath}'); crop = im.crop((1280, 50, 1780, 550)); crop.save('${squarePngPath}'); crop.save('${squareStdPath}')`,
 		]);
 	} catch (e) {
 		console.error("生成正方形头图失败:", e);
@@ -1146,7 +1057,6 @@ async function uploadImage(buffer, name, token, cache, stats) {
 		fail("图片", `${base} ${(buffer.length / 1048576).toFixed(1)}MB，超过 10MB`, "压到 10MB 以内再发");
 	}
 
-	// 文件名后缀跟真实类型对齐，避免微信按后缀判类型时误杀
 	const filename = `${path.parse(base).name || "image"}${EXT_BY_MIME[type] || path.extname(base)}`;
 	const form = new FormData();
 	form.append("media", new Blob([buffer], { type }), filename);
@@ -1188,9 +1098,7 @@ async function readImage(src, sourcePath) {
 		let name = "image.jpg";
 		try {
 			name = path.basename(decodeURIComponent(new URL(src).pathname)) || name;
-		} catch {
-			// 极少数 URL 解析不了，用默认名，类型由内容嗅探决定
-		}
+		} catch {}
 		if (!path.extname(name)) name = `${name}.jpg`;
 		return { buffer: Buffer.from(await res.arrayBuffer()), name };
 	}
@@ -1198,9 +1106,7 @@ async function readImage(src, sourcePath) {
 	let decoded = src;
 	try {
 		decoded = decodeURIComponent(src);
-	} catch {
-		// 保持原样，下面按原字符串找文件
-	}
+	} catch {}
 	const local = path.isAbsolute(decoded)
 		? decoded
 		: path.resolve(path.dirname(sourcePath), decoded);
@@ -1231,7 +1137,7 @@ async function inlineImages(html, sourcePath, token, cache, stats) {
 	return { html: output, firstMediaId };
 }
 
-// ---------- 草稿 ----------
+// ---------- 草稿推送 ----------
 
 async function push(built, html, credentials) {
 	const { appId, secret } = credentials;
@@ -1243,7 +1149,6 @@ async function push(built, html, credentials) {
 	const { html: content } = await inlineImages(html, built.abs, token, uploads, stats);
 	mark("body-images");
 
-	// 封面固定是合成出来的头图：底图 + 页面排上去的文字
 	const head = await buildHeadImage(built);
 	mark("head-image");
 	const { buffer, name } = await readImage(head, built.abs);
@@ -1316,7 +1221,7 @@ async function push(built, html, credentials) {
 	const mediaId = drafts[built.slug]?.media_id || previous;
 	console.log(`已${mode}草稿（未群发）`);
 	console.log(`  标题：${built.title}`);
-	console.log(`  原文：${built.sourceUrl || '(未设置)'}`);
+	console.log(`  原文：${built.sourceUrl || "(未设置)"}`);
 	console.log(`  media_id：${mediaId}`);
 	console.log(`  图片：新上传 ${stats.uploaded} / 复用 ${stats.cached}（已换成微信地址）`);
 	console.log(`  草稿箱：https://mp.weixin.qq.com/`);
@@ -1344,8 +1249,8 @@ async function main() {
 	if (!command || !["gen", "push"].includes(command) || !source) {
 		console.error(
 			"usage: wechat.mjs <gen|push> <文章.md> [--source-url URL] [--timing]\n" +
-				"  gen   按固定形态生成内联 HTML 和 layout.json，不联网\n" +
-				"  push  生成 + 换图片地址 + 新建/更新草稿\n" +
+				"  gen       按固定模板生成内联 HTML 和 layout.json，不联网\n" +
+				"  push      生成 + 换图片地址 + 合成头图 + 新建/更新草稿\n" +
 				"  --timing  把每个阶段耗时打到 stderr",
 		);
 		process.exit(64);
@@ -1353,7 +1258,6 @@ async function main() {
 
 	const built = buildArticle(source, sourceUrl);
 	mark("build");
-	// 凭证在渲染前读，配错时不用等一次渲染
 	const credentials = command === "push" ? loadCredentials() : null;
 	mark("credentials");
 	const html = renderArticle(built);

@@ -39,17 +39,16 @@ pnpm gen 文章.md
 
 | 源稿已有的明确形态 | 固定输出 | `layout.json` 规则名 |
 | --- | --- | --- |
-| `# 标题` | 篇章标题 | `chapter` |
-| 第一个 `#` 之前的首个普通段落 | 开头墨青导言块，全文唯一 | `lead` |
-| `## 01 标题`，编号为 1–2 位阿拉伯数字 | 带原编号的章节页签 | `chapter-tab` |
-| 其他 `## 标题` | 普通二级标题，不补编号 | `heading-2` |
-| `### 标题` | 小节 | `heading-3` |
+| 首个 `# 标题` | 剥除（作公众号主标题） | `chapter:stripped-for-wechat` |
+| 后续 `# 标题` | 篇章标题（24px 粗体 + 1px 底线） | `chapter` |
+| `## 标题` / `## 01 标题` | 唯一二级标题：24×24px `#007275` 方块编号 + 20px 粗体 | `chapter-tab` |
+| `### 标题` | 小节标题（17px 粗体 + 3px 左竖线） | `heading-3` |
 | 引用首行为 `TIP` / `NOTE` / `WARNING` / `IMPORTANT`，可跟标题 | 对应提示块；标题加粗，后续正文正常字重 | `box:*` |
 | `:::tip[标题]` / `:::note` / `:::warning` / `:::important` / `:::caution` | 对应提示块；方括号标题加粗，后续正文正常字重 | `container:*` |
-| `:::details[标题]` | 紧凑折叠块：粗标题 + 正文，不生成空摘要；标题与「点击展开 ↓」同行，底部小字「点击收起 ↑」 | `container:details` |
+| `::: githubcard <repo> :::` | GitHub 仓库引导卡片（浅底 + 左 3px 墨青竖线） | `container:githubcard` |
+| `::: details` ... `:::` | 半透明渐隐预览折叠块（双层 SVG，无顶栏，整块展开，右下角小按钮收起） | `container:details` |
 | 普通引用 | 按普通正文段落输出，不再使用短引样式 | `quote` |
 | 引用最后一行以 `——` 开头 | 长引 + 原出处行，唯一保留的引文版式 | `quote:source` |
-| ` ```fold 标题｜摘要 ` 围栏 | 折叠块，标题和摘要原样使用；提示样式与 details 相同 | `fence:fold` |
 | ` ```end ` 围栏 | 普通正文收束，不使用墨青块 | `fence:end` |
 | ` ```sign ` 围栏 | 签名块 | `fence:sign` |
 | ` ```mermaid ` 围栏 | Mermaid 渲染 | `fence:mermaid` |
