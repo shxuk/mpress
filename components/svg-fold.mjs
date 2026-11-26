@@ -1,169 +1,160 @@
 /**
- * 样式库 · 双层 SVG 半透明渐隐预览折叠块（用于 ::: details [标题] ... :::）
- * 外层无 viewBox 动画 + 内层固定比例 + focusin/focusout 双热区，不弹窗不缩放。
- * 支持可选折叠标题行 + 表格自动降级清洗，杜绝 Markdown 管道符乱码。
+ * 样式库 · 双层原生 SVG + foreignObject 图文渐隐折叠组件（统一对齐博客 div.custom-details-content 样式）
+ * 外层 SVG 控制 focusin/focusout 高度展开收起动画；
+ * 内部通过 <foreignObject> 嵌入原生 HTML <div class="custom-details-content">，完整支持文字、代码、表格与微信图片！
  */
-import { xml } from "./cards.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import MarkdownIt from "markdown-it";
+import { cjkStrong, xml } from "./cards.mjs";
 
-const SVG_STYLE = {
-	viewBoxWidth: 686,
-	charsPerLine: 24,
-	titleFontSize: 27,
-	bodyFontSize: 25,
-	lineHeight: 42,
-	previewVisibleLines: 3,
-	blockRadius: "6px",
-	colors: {
-		paper: "#f5f7f7",
-		ink: "#111819",
-		accent: "#007275",
-		muted: "#5d6667",
-		rule: "#c7d1d1",
-	},
-	sans: "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif",
-};
+const foldMd = new MarkdownIt({ html: true, breaks: true, linkify: false });
 
-const NO_LINE_START = "，。、；：？！）」』】》”’%";
-const charWidth = (ch) => (/[\x00-\xff]/.test(ch) ? 0.52 : 1);
+let foldCounter = 0;
 
-function wrapLines(text, maxChars) {
-	const lines = [];
-	let line = "";
-	let width = 0;
-	for (const ch of [...text]) {
-		if (width + charWidth(ch) > maxChars && line && !NO_LINE_START.includes(ch)) {
-			lines.push(line);
-			line = "";
-			width = 0;
+/** 从本地 PNG / JPEG / GIF 文件头部读取真实像素宽高（零依赖） */
+function getImageDimensions(src, baseDir = process.cwd()) {
+	try {
+		if (/^https?:/i.test(src)) return null;
+		const fullPath = path.isAbsolute(src) ? src : path.resolve(baseDir, src);
+		if (!fs.existsSync(fullPath)) return null;
+		const buf = fs.readFileSync(fullPath);
+		// PNG
+		if (buf.length > 24 && buf.readUInt32BE(0) === 0x89504e47) {
+			return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 		}
-		line += ch;
-		width += charWidth(ch);
-	}
-	if (line) lines.push(line);
-	return lines;
+		// GIF
+		if (buf.length > 10 && buf.toString("ascii", 0, 3) === "GIF") {
+			return { width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) };
+		}
+		// JPEG
+		if (buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+			let offset = 2;
+			while (offset < buf.length - 8) {
+				if (buf[offset] !== 0xff) break;
+				const marker = buf[offset + 1];
+				if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+					return {
+						height: buf.readUInt16BE(offset + 5),
+						width: buf.readUInt16BE(offset + 7),
+					};
+				}
+				const len = buf.readUInt16BE(offset + 2);
+				offset += 2 + len;
+			}
+		}
+	} catch {}
+	return null;
 }
 
-/** 折叠块内正文清洗：自动降级 Markdown 表格、去掉代码围栏反引号、保留缩进、链接降级 */
-function cleanBodyLines(body, maxChars) {
-	const rawLines = body.split(/\r?\n/);
-	const processed = [];
-	let inFence = false;
-	let tableHeaders = null;
+/** 估算内部 HTML 在 390px 手机视口（内容净宽约 310px）下的渲染总高度（px） */
+function estimateContentHeightPx(body, title, baseDir) {
+	let px = 40; // 上下 padding: 20px * 2
+	if (title) px += 38; // .custom-details-title-inner + margin-bottom
 
-	for (const raw of rawLines) {
+	const lines = body.split(/\r?\n/);
+	let inCode = false;
+	for (const raw of lines) {
 		const trimmed = raw.trim();
-		const fence = trimmed.match(/^```([A-Za-z0-9_-]*)/);
-		if (fence) {
-			inFence = !inFence;
-			if (inFence && fence[1]) {
-				processed.push(`[${fence[1].toUpperCase()} 代码]`);
+		if (trimmed.startsWith("```")) {
+			inCode = !inCode;
+			px += 16;
+			continue;
+		}
+		if (!trimmed) {
+			px += 10;
+			continue;
+		}
+		// 匹配图片 ![alt](src)
+		const imgMatch = trimmed.match(/^!\[[^\]]*\]\(([^)\s]+)\)/);
+		if (!inCode && imgMatch) {
+			const dim = getImageDimensions(imgMatch[1], baseDir);
+			if (dim && dim.width > 0) {
+				// 310px 为 390px 屏幕减去容器内外边距后的净宽
+				const renderedH = Math.round((310 / dim.width) * dim.height);
+				px += renderedH + 24;
+			} else {
+				px += 240; // 未知尺寸图片默认高度估算
 			}
 			continue;
 		}
-		if (/^---+$/.test(trimmed)) continue;
-
-		// Markdown 表格自动降级：把 | col1 | col2 | 转成可读条目，彻底消除管道符乱码
-		if (!inFence && /^\|.*\|$/.test(trimmed)) {
-			const cells = trimmed
-				.slice(1, -1)
-				.split("|")
-				.map((c) =>
-					c
-						.replace(/<br\s*\/?>/gi, " ")
-						.replace(/\*\*(.+?)\*\*/g, "$1")
-						.replace(/\*(.+?)\*/g, "$1")
-						.replace(/`([^`]*)`/g, "$1")
-						.replace(/\s+/g, " ")
-						.trim(),
-				);
-			if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
-			if (!tableHeaders) {
-				tableHeaders = cells;
-				continue;
-			}
-			const lead = cells[0] || "";
-			const rest = cells
-				.slice(1)
-				.map((val, idx) => (val ? `${tableHeaders[idx + 1] ? `${tableHeaders[idx + 1]}：` : ""}${val}` : ""))
-				.filter(Boolean)
-				.join("；");
-			if (lead || rest) processed.push(`▪ ${lead}${rest ? ` — ${rest}` : ""}`);
-			continue;
-		} else {
-			tableHeaders = null;
-		}
-
-		const cleaned = (inFence ? raw : trimmed)
-			.replace(/^#{1,6}\s+/, "")
-			.replace(/^>\s?/, "")
-			.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (_, text, url) =>
-				text.trim() === url.trim() ? url.trim() : `${text.trim()}（${url.trim()}）`,
-			)
-			.replace(/\*\*(.+?)\*\*/g, "$1")
-			.replace(/`([^`]*)`/g, "$1");
-		if (cleaned.trim()) processed.push(cleaned);
+		// 估算文字折行：310px 宽度 / 15px 字号 ≈ 20 汉字/行，line-height: 1.8 (27px)
+		const charUnits = [...trimmed].reduce((acc, ch) => acc + (/[\x00-\xff]/.test(ch) ? 0.55 : 1), 0);
+		const wrapCount = Math.max(1, Math.ceil(charUnits / (inCode ? 34 : 20)));
+		px += wrapCount * (inCode ? 22 : 27) + 8;
 	}
-	return processed.flatMap((line) => wrapLines(line, maxChars));
+	return Math.max(px + 16, 120);
 }
 
-export function renderSvgFold(body, fail, title = "") {
-	const cfg = SVG_STYLE;
-	const c = cfg.colors;
-	const W = cfg.viewBoxWidth;
-	const lh = cfg.lineHeight;
-	const lines = cleanBodyLines(body, cfg.charsPerLine);
-	if (!lines.length) fail("结构", "details 折叠块没有正文", "在 ::: details 下补充内容");
+/** 将内部 Markdown 渲染为微信安全的纯内联 div.custom-details-content HTML */
+function renderInnerHtml(body, title) {
+	const preprocessed = body
+		.split(/\r?\n/)
+		.map((l) => cjkStrong(l))
+		.join("\n");
 
-	const cleanTitle = String(title || "").replace(/[：:]\s*$/, "").trim();
-	const hasTitle = Boolean(cleanTitle);
-	const firstY = hasTitle ? 104 : 48;
-	const visibleCount = Math.min(lines.length, cfg.previewVisibleLines);
-	const collapsedH = hasTitle
-		? 82 + visibleCount * lh + 18
-		: 26 + visibleCount * lh + 20;
-	const maskTop = Math.max(hasTitle ? 120 : 40, collapsedH - 72);
-	const viewBoxH = firstY + (lines.length - 1) * lh + 32;
-	const expandedVw = ((viewBoxH / W) * 100 * 0.92).toFixed(1);
-	const collapsedVw = ((Math.min(collapsedH, viewBoxH) / W) * 100 * 0.92).toFixed(1);
+	let html = foldMd.render(preprocessed);
 
-	const titleBlock = hasTitle
-		? `<rect x="0" y="0" width="${W}" height="64" fill="#eef4f4"></rect>
-    <line x1="0" y1="64" x2="${W}" y2="64" stroke="${c.rule}" stroke-width="1"></line>
-    <text x="24" y="42" font-size="${cfg.titleFontSize}" font-weight="700" fill="${c.ink}" font-family="${cfg.sans}">${xml(cleanTitle.slice(0, 20))}</text>
-    <text x="${W - 24}" y="40" font-size="20" font-weight="600" fill="${c.accent}" text-anchor="end" font-family="${cfg.sans}">点击展开 ↓</text>`
+	// 统一内联基础排版样式（对齐博客 .custom-details-content）
+	html = html
+		.replace(/<p>/g, '<p style="margin: 0 0 10px; font-size: 15px; line-height: 1.8; color: #111819;">')
+		.replace(/<pre><code([^>]*)>/g, '<pre style="margin: 10px 0; padding: 12px 14px; border-radius: 6px; background: #eef2f3; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.6; color: #111819;"><code$1 style="font-family: inherit; background: transparent; padding: 0;">')
+		.replace(/<code>/g, '<code style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; padding: 2px 5px; border-radius: 3px; background: #e8eeee; color: #111819;">')
+		.replace(/<img([^>]+)>/g, '<img$1 style="display: block; width: 100%; height: auto; border-radius: 6px; margin: 10px 0; border: 1px solid rgba(0,0,0,0.06);" />')
+		.replace(/<ul>/g, '<ul style="margin: 6px 0 10px; padding-left: 1.4em; font-size: 15px; line-height: 1.8; color: #111819;">')
+		.replace(/<ol>/g, '<ol style="margin: 6px 0 10px; padding-left: 1.4em; font-size: 15px; line-height: 1.8; color: #111819;">')
+		.replace(/<li>/g, '<li style="margin: 4px 0;">')
+		.replace(/<strong>/g, '<strong style="font-weight: 700; color: #111819;">')
+		.replace(/<table>/g, '<table style="width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13.5px;">')
+		.replace(/<th>/g, '<th style="padding: 6px 8px; border: 1px solid #d2dbdb; background: #eef4f4; font-weight: 700; text-align: left;">')
+		.replace(/<td>/g, '<td style="padding: 6px 8px; border: 1px solid #d2dbdb;">');
+
+	const titleHtml = title
+		? `<div class="custom-details-title-inner" style="font-size: 15px; font-weight: 700; color: #111819; margin: 0 0 14px; line-height: 1.5;"><strong>${xml(title)}</strong></div>`
 		: "";
 
-	const previewOverlay = `
-    <g opacity="1">
-      <animate attributeName="opacity" begin="focusin" values="1;0" dur="0.2s" fill="freeze" restart="whenNotActive"></animate>
-      <animate attributeName="opacity" begin="focusout" values="0;1" dur="0.2s" fill="freeze" restart="whenNotActive"></animate>
-      <rect x="0" y="${maskTop}" width="${W}" height="34" fill="${c.paper}" fill-opacity="0.48"></rect>
-      <rect x="0" y="${maskTop + 34}" width="${W}" height="52" fill="${c.paper}" fill-opacity="0.90"></rect>
-    </g>`;
+	return `<div class="custom-details-content" style="padding: 20px 24px; font-size: 15px; line-height: 1.8; color: #111819; background: #fafbfc; box-sizing: border-box;">${titleHtml}${html}</div>`;
+}
 
-	const bodyLines = lines
-		.map(
-			(line, idx) =>
-				`<text x="24" y="${firstY + idx * lh}" font-size="${cfg.bodyFontSize}" fill="${c.ink}" font-family="${cfg.sans}">${xml(line)}</text>`,
-		)
-		.join("\n");
+export function renderSvgFold(body, fail, title = "", baseDir = process.cwd()) {
+	const totalPx = estimateContentHeightPx(body, title, baseDir);
+	const collapsePx = 195;
+	const needsFold = totalPx > collapsePx + 30;
 
-	const html = `<section style="margin:16px 0;border:1px solid ${c.rule};border-radius:${cfg.blockRadius};overflow:hidden;background:${c.paper};">
-<svg class="wx-fold-outer" tabindex="0" xmlns="http://www.w3.org/2000/svg" width="100%" height="${collapsedVw}vw">
-  <animate attributeName="height" attributeType="XML" begin="focusin" values="${collapsedVw}vw;${expandedVw}vw" dur="0.26s" fill="freeze" restart="whenNotActive"></animate>
-  <animate attributeName="height" attributeType="XML" begin="focusout" values="${expandedVw}vw;${collapsedVw}vw" dur="0.22s" fill="freeze" restart="whenNotActive"></animate>
-  <svg class="wx-fold-inner" x="0" y="0" width="100%" height="${expandedVw}vw" viewBox="0 0 ${W} ${viewBoxH}" preserveAspectRatio="xMinYMin meet" xmlns="http://www.w3.org/2000/svg">
-    <rect width="${W}" height="${viewBoxH}" fill="${c.paper}"></rect>
-    ${titleBlock}
-    ${bodyLines}
-    ${previewOverlay}
-  </svg>
-</svg>
-<p class="wx-fold-hint"><span class="wx-fold-btn" tabindex="0"><span leaf="">点击收起 ↑</span></span></p>
+	// 以 390px 标准手机屏换算 vw 高度
+	const collapsedVw = needsFold ? ((collapsePx / 390) * 100).toFixed(1) : ((totalPx / 390) * 100).toFixed(1);
+	const expandedVw = ((totalPx / 390) * 100).toFixed(1);
+
+	const innerHtml = renderInnerHtml(body, title);
+	const gradId = `wxFoldGrad_${++foldCounter}`;
+
+	const gradientOverlay = needsFold
+		? `<g opacity="1" style="pointer-events: none;">
+      <animate attributeName="opacity" begin="focusin" values="1;0" dur="0.22s" fill="freeze" restart="whenNotActive"/>
+      <animate attributeName="opacity" begin="focusout" values="0;1" dur="0.22s" fill="freeze" restart="whenNotActive"/>
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#fafbfc" stop-opacity="0"/>
+          <stop offset="55%" stop-color="#fafbfc" stop-opacity="0.78"/>
+          <stop offset="100%" stop-color="#fafbfc" stop-opacity="1"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="42%" width="100%" height="58%" fill="url(#${gradId})"/>
+    </g>`
+		: "";
+
+	const footerHtml = needsFold
+		? `<div class="custom-details-footer" style="position: relative; z-index: 2; display: block; text-align: center; padding: 10px 18px 14px; background: #fafbfc; border-top: 1px dashed rgba(0, 0, 0, 0.08);"><span class="custom-details-toggle-btn" tabindex="0" style="display: inline-block; padding: 6px 18px; border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 20px; background: #ffffff; color: #007275; font-size: 13px; font-weight: 600; line-height: 1.4; outline: none; -webkit-tap-highlight-color: transparent;"><span leaf="">点击内容展开 / 点此收起 ▾</span></span></div>`
+		: "";
+
+	return `<section class="custom-details-preview-box" style="margin: 20px 0; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px; background: #fafbfc; overflow: hidden;">
+<svg class="wx-fold-outer" tabindex="0" xmlns="http://www.w3.org/2000/svg" width="100%" height="${collapsedVw}vw" style="display: block; width: 100%; max-width: 100%; overflow: hidden; background: #fafbfc; outline: none; -webkit-tap-highlight-color: transparent;">
+  <animate attributeName="height" attributeType="XML" begin="focusin" values="${collapsedVw}vw;${expandedVw}vw" dur="0.28s" fill="freeze" restart="whenNotActive"/>
+  <animate attributeName="height" attributeType="XML" begin="focusout" values="${expandedVw}vw;${collapsedVw}vw" dur="0.22s" fill="freeze" restart="whenNotActive"/>
+  <foreignObject width="100%" height="100%" x="0" y="0">
+    ${innerHtml}
+  </foreignObject>
+  ${gradientOverlay}
+</svg>${footerHtml}
 </section>`;
-
-	return html
-		.split(/\r?\n/)
-		.filter((l) => l.trim())
-		.join("\n");
 }

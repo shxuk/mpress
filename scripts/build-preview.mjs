@@ -114,13 +114,13 @@ async function main() {
 		const qa = body.match(/<section class="wx-qa"[\s\S]*?<\/section>/);
 		if (qa) renderCard(qa[0], "assets/components/07-qa.png", 520, 420);
 
-		const details = body.match(/<section style="margin:16px 0;border:1px solid #c7d1d1[\s\S]*?点击收起[\s\S]*?<\/section>/);
-		if (details) renderCard(details[0], "assets/components/08-details-fold.png", 520, 260);
+		const details = body.match(/<section class="custom-details-preview-box"[\s\S]*?<\/section>/);
+		if (details) renderCard(details[0], "assets/components/08-details-fold.png", 520, 300);
 
 		const checklist = body.match(/<section class="wx-checklist"[\s\S]*?<\/section>/);
 		if (checklist) renderCard(checklist[0], "assets/components/09-checklist.png", 520, 380);
 
-		const github = body.match(/<section class="wx-github-card"[\s\S]*?<\/section>\s*<section style="margin:16px 0;border:1px solid #c7d1d1[\s\S]*?点击收起[\s\S]*?<\/section>/);
+		const github = body.match(/<section class="wx-github-card"[\s\S]*?<\/section>\s*<section class="custom-details-preview-box"[\s\S]*?<\/section>/);
 		if (github) renderCard(github[0], "assets/components/10-github-card.png", 520, 360);
 
 		const follow = body.match(/<section class="wx-follow"[\s\S]*?<\/section>/);
