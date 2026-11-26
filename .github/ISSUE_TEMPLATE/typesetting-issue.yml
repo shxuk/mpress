@@ -1,0 +1,34 @@
+name: 排版问题
+description: 反馈 Markdown 渲染、卡片样式、折叠块或图片排版异常
+title: "[排版] "
+labels: ["bug", "typesetting"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈排版问题！请提供触发问题的 Markdown 片段，方便我们快速复现和定位（mpress 是纯脚本渲染，同输入必同输出）。
+  - type: textarea
+    id: markdown-snippet
+    attributes:
+      label: 源 Markdown 片段
+      description: 请粘贴导致排版异常的 Markdown 源码（请剔除敏感信息）
+      placeholder: |
+        ::: metrics[核心指标]
+        ...
+        :::
+    validations:
+      required: true
+  - type: textarea
+    id: expected-vs-actual
+    attributes:
+      label: 预期效果 vs 实际效果
+      description: 简述哪里显示不对（如手机端折行、样式丢失、折叠失败等），建议直接粘贴截图
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: mpress 版本
+      placeholder: "例如：1.2.0"
+    validations:
+      required: false

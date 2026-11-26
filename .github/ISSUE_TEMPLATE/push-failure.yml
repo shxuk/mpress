@@ -1,0 +1,37 @@
+name: 推送草稿箱失败
+description: 反馈执行 push 命令上传图片、合成封面或写入微信草稿箱时的报错
+title: "[推送失败] "
+labels: ["bug", "wechat-api"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请对照退出码提供报错信息。**切勿在此粘贴您的 AppID、AppSecret 或完整凭证内容。**
+  - type: dropdown
+    id: exit-code
+    attributes:
+      label: 退出码（Exit Code）
+      options:
+        - "2 - 凭证缺失或无效"
+        - "3 - IP 白名单未配置或未生效"
+        - "4 - 图片上传或封面合成失败"
+        - "5 - 源稿结构或路径问题"
+        - "6 - 网络请求或微信接口超时"
+        - "其他 / 不确定"
+    validations:
+      required: true
+  - type: textarea
+    id: error-log
+    attributes:
+      label: 终端报错输出
+      description: 请粘贴完整的错误日志（请确保已隐藏敏感信息）
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      description: 操作系统与 Node.js 版本
+      placeholder: "例如：Windows 11 / Node v22.12.0"
+    validations:
+      required: false

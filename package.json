@@ -5,8 +5,8 @@
   "type": "module",
   "main": "scripts/wechat.mjs",
   "bin": {
-    "mpress": "./scripts/wechat.mjs",
-    "wechat-publisher": "./scripts/wechat.mjs"
+    "mpress": "scripts/wechat.mjs",
+    "wechat-publisher": "scripts/wechat.mjs"
   },
   "files": [
     "scripts/",
