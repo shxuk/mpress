@@ -43,42 +43,64 @@ function getImageDimensions(src, baseDir = process.cwd()) {
 	return null;
 }
 
-/** 估算内部 HTML 在 390px 手机视口（净宽约 338px）下的渲染总高度（px） */
+/** 估算内部 HTML 在 390px 手机视口（容器宽 358px，净宽约 330px）下的精确渲染高度（px） */
 function estimateContentHeightPx(body, title, baseDir) {
 	let px = 28; // 上下 padding: 14px * 2
-	if (title) px += 34;
+	if (title) {
+		const titleUnits = [...title].reduce((acc, ch) => acc + (/[\x00-\xff]/.test(ch) ? 0.56 : 1), 0);
+		const titleLines = Math.max(1, Math.ceil(titleUnits / 22.5));
+		px += titleLines * 23 + 8; // line-height: 1.6 (~23px) + margin-bottom: 8px
+	}
 
 	const lines = body.split(/\r?\n/);
 	let inCode = false;
-	for (const raw of lines) {
+	let prevWasBlank = true;
+	let inParagraph = false;
+
+	for (let idx = 0; idx < lines.length; idx++) {
+		const raw = lines[idx];
 		const trimmed = raw.trim();
 		if (trimmed.startsWith("```")) {
 			inCode = !inCode;
-			px += 16;
+			px += inCode ? 10 : 18;
+			prevWasBlank = false;
 			continue;
 		}
 		if (!trimmed) {
-			px += 6;
+			if (inParagraph) {
+				px += 8; // 段落 margin-bottom: 8px
+				inParagraph = false;
+			}
+			prevWasBlank = true;
 			continue;
 		}
 		const imgMatch = trimmed.match(/^!\[[^\]]*\]\(([^)\s]+)\)/);
 		if (!inCode && imgMatch) {
+			if (inParagraph) {
+				px += 8;
+				inParagraph = false;
+			}
 			const dim = getImageDimensions(imgMatch[1], baseDir);
 			if (dim && dim.width > 0) {
-				const renderedH = Math.round((338 / dim.width) * dim.height);
-				px += renderedH + 14;
+				const renderedH = Math.round((330 / dim.width) * dim.height);
+				px += renderedH + 12;
 			} else {
-				px += 260;
+				px += 240;
 			}
+			prevWasBlank = false;
 			continue;
 		}
-		// 338px 净宽 / 14.5px 字号，保守按 21 汉字/行估算折行（宁可多留余量，绝不截断）
+
+		// 330px 净宽 / 14.5px 字号 ≈ 22.5 汉字/行，line-height: 1.65 (24px)
 		const charUnits = [...trimmed].reduce((acc, ch) => acc + (/[\x00-\xff]/.test(ch) ? 0.56 : 1), 0);
-		const wrapCount = Math.max(1, Math.ceil(charUnits / (inCode ? 36 : 21)));
-		px += wrapCount * (inCode ? 22 : 25) + 10;
+		const wrapCount = Math.max(1, Math.ceil(charUnits / (inCode ? 36 : 22.5)));
+		px += wrapCount * (inCode ? 19 : 24);
+		inParagraph = !inCode;
+		prevWasBlank = false;
 	}
-	// 加 15% 安全系数 + 28px 底部缓冲，确保在任何字体/微信渲染下 100% 完整展示
-	return Math.max(Math.round(px * 1.15) + 28, 120);
+
+	// 最后一行若在段落中，包含最后一个 <p> 的 margin-bottom: 8px，但仅需 +4px 呼吸余量即可
+	return Math.max(px + 12, 96);
 }
 
 /** 将内部 Markdown 渲染为微信安全的内联 <section class="custom-details-content"> HTML */
