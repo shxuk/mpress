@@ -303,19 +303,43 @@ export function stepsHtml(lines, title = "") {
 			})
 			.join("\n");
 	} else {
-		const rows = lines.map((l) => l.trim()).filter(Boolean);
-		itemsHtml = rows
-			.map((line, idx) => {
-				const parts = line.split("|").map((s) => s.trim());
+		const rawRows = lines.map((l) => l.trim()).filter(Boolean);
+		// 若存在包含 | 或以编号开头的行与普通说明行混排，自动将紧随其后的说明行归入当前步骤
+		const grouped = [];
+		for (const line of rawRows) {
+			const isStart = line.includes("|") || /^\d+[.)、]\s*/.test(line);
+			if (isStart || grouped.length === 0) {
+				grouped.push([line]);
+			} else {
+				grouped[grouped.length - 1].push(line);
+			}
+		}
+		itemsHtml = grouped
+			.map((group, idx) => {
+				const [headLine, ...extraDesc] = group;
+				const cleanHead = headLine.replace(/^\d+[.)、]\s*/, "").trim();
+				const parts = cleanHead.split("|").map((s) => s.trim());
 				const no = String(idx + 1).padStart(2, "0");
 				const stepTitle = parts[0] || "";
-				const badge = parts.length >= 3 ? parts[1] : "";
-				const desc = parts.length >= 3 ? parts.slice(2).join(" · ") : parts[1] || "";
+				let badge = "";
+				let inlineDesc = "";
+				if (parts.length >= 3) {
+					badge = parts[1];
+					inlineDesc = parts.slice(2).join(" · ");
+				} else if (parts.length === 2) {
+					// 若只有两段且存在后续描述行，第二段即为徽章标签；否则视作描述
+					if (extraDesc.length > 0) {
+						badge = parts[1];
+					} else {
+						inlineDesc = parts[1];
+					}
+				}
+				const allDesc = [inlineDesc, ...extraDesc].filter(Boolean);
 				const isWarn = /阴影|警告|坑|避开|风险/.test(stepTitle + badge);
 				const badgeHtml = badge
 					? `<span class="wx-step-badge${isWarn ? " wx-step-badge-warn" : ""}">${xml(badge)}</span>`
 					: "";
-				const descHtml = desc ? `\n<p class="wx-step-row">${compText(desc)}</p>` : "";
+				const descHtml = allDesc.map((d) => `\n<p class="wx-step-row">${compText(d)}</p>`).join("");
 				return `<section class="wx-step-item${isWarn ? " wx-step-warn" : ""}"><table class="wx-step-table"><tbody><tr><td class="wx-step-no-td"><span class="wx-step-no${isWarn ? " wx-step-no-warn" : ""}">${isWarn ? "!" : no}</span></td><td class="wx-step-body-td"><section class="wx-step-content${isWarn ? " wx-step-content-warn" : ""}"><p class="wx-step-head"><span class="wx-step-title">${compText(stepTitle)}</span>${badgeHtml}</p>${descHtml}</section></td></tr></tbody></table></section>`;
 			})
 			.join("\n");

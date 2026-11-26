@@ -770,7 +770,11 @@
 }
 #wx-article .wx-qa-badge-q {
 	display: inline-block;
-	padding: 1px 6px;
+	width: 26px;
+	height: 26px;
+	line-height: 26px;
+	text-align: center;
+	padding: 0;
 	border-radius: 4px;
 	background: #007275;
 	font-family: "SFMono-Regular", Menlo, Consolas, monospace;
@@ -780,7 +784,11 @@
 }
 #wx-article .wx-qa-badge-a {
 	display: inline-block;
-	padding: 1px 7px;
+	width: 26px;
+	height: 26px;
+	line-height: 26px;
+	text-align: center;
+	padding: 0;
 	border-radius: 4px;
 	background: #e5ecec;
 	font-family: "SFMono-Regular", Menlo, Consolas, monospace;
