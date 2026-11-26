@@ -1,8 +1,13 @@
 ---
 name: mpress
+slug: mpress
+displayName: mpress 公众号排版发布器
+version: 1.2.0
 description: 把 Markdown 或纯文本排成微信公众号图文并推进草稿箱的 Skill。当用户说"公众号排版/微信图文/推文排版/排成公众号格式/生成封面图/推到草稿箱/一键发布到公众号"时使用；产出内联 HTML、layout.json、1800×766 封面，可只本地生成（不联网）或直连公众号草稿箱。渲染为纯脚本、结果确定（同输入同输出）。不用于改写文章内容，不自动群发。
-metadata:
-  version: "1.2.0"
+summary: 把 Markdown 一句话排成微信公众号图文，连同封面一起推进草稿箱。
+tags: [微信, 公众号, 排版, markdown, 封面图]
+license: MIT
+homepage: https://shxuk.cn/lab
 ---
 
 # mpress · 公众号固定排版 + 草稿上传
