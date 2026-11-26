@@ -24,11 +24,40 @@ function runChromeScreenshot(htmlContent, outPngPath, width, height) {
 	console.log(`Saved screenshot: ${outPngPath}`);
 }
 
+function renderCard(innerHtml, outPngPath, width = 520, minHeight = 100) {
+	const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    background: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    display: inline-block;
+    width: 480px;
+  }
+</style>
+</head>
+<body>
+  ${innerHtml}
+</body>
+</html>`;
+	runChromeScreenshot(fullHtml, outPngPath, width, minHeight);
+}
+
 async function main() {
-	// 1. 生成组件长图展示 (assets/preview-components.png)
 	const bodyHtmlPath = "y:/06_services/wechat-article-publisher/work/editorial/body.html";
+	const compDir = path.resolve("assets/components");
+	if (!fs.existsSync(compDir)) fs.mkdirSync(compDir, { recursive: true });
+
 	if (fs.existsSync(bodyHtmlPath)) {
 		const body = fs.readFileSync(bodyHtmlPath, "utf8");
+
+		// 1. 全长图
 		const containerHtml = `<!DOCTYPE html>
 <html>
 <head>
@@ -55,16 +84,50 @@ async function main() {
 </style>
 </head>
 <body>
-  <div class="phone-frame">
-    ${body}
-  </div>
+  <div class="phone-frame">${body}</div>
 </body>
 </html>`;
-		// 截取前 2800px 高度的丰富组件区域
-		runChromeScreenshot(containerHtml, "assets/preview-components.png", 500, 2400);
+		runChromeScreenshot(containerHtml, "assets/preview-components.png", 500, 3200);
+
+		// 2. 独立组件切片图
+		const kickerLead = body.match(/<section class="wx-kicker"[\s\S]*?<\/section>\s*<section class="wx-lead"[\s\S]*?<\/section>/);
+		if (kickerLead) renderCard(kickerLead[0], "assets/components/01-kicker-lead.png", 520, 260);
+
+		const callouts = body.match(/<section class="wx-box wx-box-tip"[\s\S]*?<section class="wx-box wx-box-important"[\s\S]*?<\/section>/);
+		if (callouts) renderCard(callouts[0], "assets/components/00-callouts.png", 520, 480);
+
+		const metrics = body.match(/<section class="wx-metrics"[\s\S]*?<\/section>/);
+		if (metrics) renderCard(metrics[0], "assets/components/02-metrics.png", 520, 300);
+
+		const versus = body.match(/<section class="wx-versus"[\s\S]*?<\/section>/);
+		if (versus) renderCard(versus[0], "assets/components/03-versus.png", 520, 480);
+
+		const steps = body.match(/<section class="wx-steps"[\s\S]*?<\/section>/);
+		if (steps) renderCard(steps[0], "assets/components/04-steps.png", 520, 480);
+
+		const dossier = body.match(/<section class="wx-dossier"[\s\S]*?<\/section>/);
+		if (dossier) renderCard(dossier[0], "assets/components/05-dossier.png", 520, 400);
+
+		const verdict = body.match(/<section class="wx-verdict"[\s\S]*?<\/section>/);
+		if (verdict) renderCard(verdict[0], "assets/components/06-verdict.png", 520, 220);
+
+		const qa = body.match(/<section class="wx-qa"[\s\S]*?<\/section>/);
+		if (qa) renderCard(qa[0], "assets/components/07-qa.png", 520, 420);
+
+		const details = body.match(/<section style="margin:16px 0;border:1px solid #c7d1d1[\s\S]*?点击收起[\s\S]*?<\/section>/);
+		if (details) renderCard(details[0], "assets/components/08-details-fold.png", 520, 260);
+
+		const checklist = body.match(/<section class="wx-checklist"[\s\S]*?<\/section>/);
+		if (checklist) renderCard(checklist[0], "assets/components/09-checklist.png", 520, 380);
+
+		const github = body.match(/<section class="wx-github-card"[\s\S]*?<\/section>\s*<section style="margin:16px 0;border:1px solid #c7d1d1[\s\S]*?点击收起[\s\S]*?<\/section>/);
+		if (github) renderCard(github[0], "assets/components/10-github-card.png", 520, 360);
+
+		const follow = body.match(/<section class="wx-follow"[\s\S]*?<\/section>/);
+		if (follow) renderCard(follow[0], "assets/components/11-follow.png", 520, 240);
 	}
 
-	// 2. 生成头图模板 Template-D 示例 (assets/preview-cover-d.png)
+	// 3. 生成头图模板 Template-D 示例
 	const tplD = fs.readFileSync("templates/template-d.html", "utf8");
 	const coverDHtml = tplD
 		.replaceAll("{{TITLE}}", "AI 时代的个人知识库发布规范与微信全流程实践")
@@ -82,10 +145,9 @@ async function main() {
 		.replaceAll("{{FOOTER_SLOGAN}}", "构建可持续的数字写作与多端发布工作流")
 		.replaceAll("{{WORD_COUNT_LABEL}}", "全组件实测")
 		.replaceAll("{{SITE_DOMAIN}}", "shxuk.cn");
-
 	runChromeScreenshot(coverDHtml, "assets/preview-cover-d.png", 1800, 766);
 
-	// 3. 生成头图模板 Template-E 示例 (assets/preview-cover-e.png)
+	// 4. 生成头图模板 Template-E 示例
 	const tplE = fs.readFileSync("templates/template-e.html", "utf8");
 	const coverEHtml = tplE
 		.replaceAll("{{TITLE}}", "给决策者的 GEO 与 AI 搜索排版指南")
@@ -109,7 +171,6 @@ async function main() {
 		.replaceAll("{{ISSUE_NO}}", "CH. 1")
 		.replaceAll("{{FOOTER_SLOGAN}}", "AI 搜索我的博客：shxuk.cn 让 AI 帮你总结全文")
 		.replaceAll("{{WORD_COUNT_LABEL}}", "共 7 章连载");
-
 	runChromeScreenshot(coverEHtml, "assets/preview-cover-e.png", 1800, 766);
 }
 
