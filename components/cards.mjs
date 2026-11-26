@@ -163,15 +163,27 @@ export function metricsHtml(lines, title = "") {
 export function dossierHtml(lines, sectionTitle = "") {
 	const rawBlocks = lines
 		.join("\n")
-		.split(/^\s*---\s*$/m)
+		.split(/^\s*-{3,}\s*$/m)
 		.map((b) => b.split(/\r?\n/).map((l) => l.trim()).filter(Boolean))
 		.filter((b) => b.length);
 
 	const cards = rawBlocks
 		.map((block, idx) => {
 			const [headRaw, ...rest] = block;
-			const [name, badge = ""] = headRaw.split("|").map((s) => s.trim());
-			const no = String(idx + 1).padStart(2, "0");
+			const parts = headRaw.split("|").map((s) => s.trim());
+			let no = String(idx + 1).padStart(2, "0");
+			let name = parts[0] || "";
+			let badge = parts[1] || "";
+			if (parts.length >= 3) {
+				if (/^\d{1,2}$/.test(parts[0])) {
+					no = parts[0].padStart(2, "0");
+					name = parts[1];
+					badge = parts.slice(2).join(" | ");
+				} else {
+					name = parts[0];
+					badge = parts[1];
+				}
+			}
 			const badgeHtml = badge ? `<span class="wx-dossier-badge">${xml(badge)}</span>` : "";
 			const rows = rest
 				.map((line) => {
@@ -197,7 +209,7 @@ export function dossierHtml(lines, sectionTitle = "") {
 export function versusHtml(lines, sectionTitle = "") {
 	const rawBlocks = lines
 		.join("\n")
-		.split(/^\s*---\s*$/m)
+		.split(/^\s*-{3,}\s*$/m)
 		.map((b) => b.split(/\r?\n/).map((l) => l.trim()).filter(Boolean))
 		.filter((b) => b.length);
 
@@ -254,13 +266,13 @@ export function checklistHtml(lines, title = "行动底牌清单") {
  * 支持单行模式（每行：标题 | 标签 | 说明）与多行块模式（用 --- 分隔步骤）
  */
 export function stepsHtml(lines, title = "") {
-	const hasDivider = lines.some((l) => /^\s*---\s*$/.test(l));
+	const hasDivider = lines.some((l) => /^\s*-{3,}\s*$/.test(l));
 	let itemsHtml = "";
 
 	if (hasDivider) {
 		const blocks = lines
 			.join("\n")
-			.split(/^\s*---\s*$/m)
+			.split(/^\s*-{3,}\s*$/m)
 			.map((b) =>
 				b
 					.split(/\r?\n/)
@@ -333,7 +345,7 @@ export function verdictHtml(lines, title = "") {
 export function qaHtml(lines, title = "") {
 	const blocks = lines
 		.join("\n")
-		.split(/^\s*---\s*$/m)
+		.split(/^\s*-{3,}\s*$/m)
 		.map((b) =>
 			b
 				.split(/\r?\n/)
