@@ -1,9 +1,8 @@
 /**
- * 样式库 · 双层原生 SVG + foreignObject 图文渐隐折叠组件
- * 1. 使用 px 绝对高度动画（脱离 vw 在大屏手机/PC端的比例膨胀），展开后零多余空白；
- * 2. 渐隐遮罩（三层无 id 半透明 <rect>）与「点击展开」提示均置于 <svg> 内部：
- *    点击即可 100% 触发 <svg> focusin，展开高度的同时将遮罩+按钮彻底隐藏（opacity:0 + visibility:hidden），正文 100% 清晰；
- * 3. 底部留有极简透明收起热区（tabindex="0"），点击即可触发 focusout 平滑收起。
+ * 样式库 · 原生 SVG + foreignObject 极简展开组件（只展开、不关闭、无透明遮罩）
+ * 1. 使用 begin="click" + fill="freeze" 控制 px 绝对高度平滑展开，彻底避免 focusout 回弹；
+ * 2. 去掉所有半透明渐隐遮罩，露出完整清晰文字；
+ * 3. 底部留有实底「点击展开 ▾」提示栏，点击后立即隐藏（visibility="hidden"），展现全部正文。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -87,7 +86,6 @@ function estimateContentHeightPx(body, title, baseDir) {
 			continue;
 		}
 
-		// 按 330px 净宽、14.5px 字号估算（约 22.5 汉字/行），行高 24px
 		const charUnits = [...trimmed].reduce((acc, ch) => acc + (/[\x00-\xff]/.test(ch) ? 0.56 : 1), 0);
 		const wrapCount = Math.max(1, Math.ceil(charUnits / (inCode ? 36 : 22.5)));
 		px += wrapCount * (inCode ? 19 : 24);
@@ -129,7 +127,7 @@ function renderInnerHtml(body, title) {
 
 export function renderSvgFold(body, fail, title = "", baseDir = process.cwd()) {
 	const totalPx = estimateContentHeightPx(body, title, baseDir);
-	const collapsePx = 165;
+	const collapsePx = 155;
 	const needsFold = totalPx > collapsePx + 30;
 
 	const startH = needsFold ? collapsePx : totalPx;
@@ -137,38 +135,25 @@ export function renderSvgFold(body, fail, title = "", baseDir = process.cwd()) {
 
 	const innerHtml = renderInnerHtml(body, title);
 
-	// 热区 A（展开前覆盖下半部分）：三层半透明渐隐 + 居中「点击展开」药丸提示，全部置于 <svg> 内部！
-	// 点击它即触发 <svg> 的 focusin：展开高度的同时，自身 opacity 归 0 且 visibility 设为 hidden 彻底消失！
-	const foldOverlayInSvg = needsFold
-		? `<g opacity="1" visibility="visible">
-      <animate attributeName="opacity" begin="focusin" values="1;0" dur="0.18s" fill="freeze" restart="whenNotActive"/>
-      <set attributeName="visibility" to="hidden" begin="focusin" fill="freeze"/>
-      <animate attributeName="opacity" begin="focusout" values="0;1" dur="0.2s" fill="freeze" restart="whenNotActive"/>
-      <set attributeName="visibility" to="visible" begin="focusout" fill="freeze"/>
-      <rect x="0" y="45%" width="100%" height="18%" fill="#fafbfc" fill-opacity="0.40"/>
-      <rect x="0" y="63%" width="100%" height="18%" fill="#fafbfc" fill-opacity="0.75"/>
-      <rect x="0" y="81%" width="100%" height="19%" fill="#fafbfc" fill-opacity="0.96"/>
-      <foreignObject x="0" y="56%" width="100%" height="28%">
-        <section style="text-align: center; padding-top: 6px; background: transparent;">
-          <span style="display: inline-block; padding: 3px 16px; border: 1px solid #c7d1d1; border-radius: 16px; background: #ffffff; font-size: 12px; font-weight: 600; line-height: 1.4; color: #007275;">点击展开</span>
+	// 实底展开提示栏（无透明遮罩，只负责点击展开，展开后立即隐身消失）
+	const expandBarInSvg = needsFold
+		? `<g visibility="visible">
+      <set attributeName="visibility" to="hidden" begin="click" fill="freeze"/>
+      <foreignObject x="0" y="114" width="100%" height="41">
+        <section style="text-align: center; padding: 7px 0; background: #fafbfc; border-top: 1px dashed #d8dfdf;">
+          <span style="display: inline-block; padding: 2px 16px; border: 1px solid #c7d1d1; border-radius: 16px; background: #ffffff; font-size: 12px; font-weight: 600; line-height: 1.4; color: #007275;">点击展开 ▾</span>
         </section>
       </foreignObject>
     </g>`
 		: "";
 
-	// 热区 B（展开后起作用）：置于 <svg> 外部底端的纯透明小热区，点一下即可把焦点移出 <svg> 触发 focusout 收起（无任何文字、边框与透明遮罩）
-	const transparentCollapseHotspot = needsFold
-		? `<p style="margin: -16px 0 0; padding: 0; height: 16px; background: transparent; position: relative; z-index: 2;"><span class="wx-fold-hotspot" tabindex="0" style="display: block; width: 100%; height: 16px; border: none; background: transparent; outline: none; -webkit-tap-highlight-color: transparent;"></span></p>`
-		: "";
-
 	return `<section class="custom-details-preview-box" style="margin: 14px 0; border: 1px solid #d8dfdf; border-radius: 8px; background: #fafbfc; overflow: hidden;">
-<svg class="wx-fold-outer" tabindex="0" xmlns="http://www.w3.org/2000/svg" width="100%" height="${startH}px" style="display: block; width: 100%; max-width: 100%; overflow: hidden; background: #fafbfc; outline: none; -webkit-tap-highlight-color: transparent;">
-  <animate attributeName="height" attributeType="XML" begin="focusin" values="${startH}px;${endH}px" dur="0.26s" fill="freeze" restart="whenNotActive"/>
-  <animate attributeName="height" attributeType="XML" begin="focusout" values="${endH}px;${startH}px" dur="0.22s" fill="freeze" restart="whenNotActive"/>
+<svg class="wx-fold-outer" xmlns="http://www.w3.org/2000/svg" width="100%" height="${startH}px" style="display: block; width: 100%; max-width: 100%; overflow: hidden; background: #fafbfc; outline: none; -webkit-tap-highlight-color: transparent;">
+  <animate attributeName="height" attributeType="XML" begin="click" values="${startH}px;${endH}px" dur="0.25s" fill="freeze"/>
   <foreignObject width="100%" height="100%" x="0" y="0">
     ${innerHtml}
   </foreignObject>
-  ${foldOverlayInSvg}
-</svg>${transparentCollapseHotspot}
+  ${expandBarInSvg}
+</svg>
 </section>`;
 }
