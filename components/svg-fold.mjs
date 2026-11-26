@@ -1,8 +1,9 @@
 /**
  * 样式库 · 双层原生 SVG + foreignObject 图文渐隐折叠组件
- * 1. 渐隐遮罩：采用三层无 id 半透明 <rect> 叠加，100% 免疫微信过滤 <linearGradient id>；
- * 2. 免疫微信 list 清洗：将 <ul>/<ol> 转为带圆点/编号的 <p>，外层用 <section> 锁定 padding，避免高度膨胀与截断；
- * 3. 按钮：底部仅保留唯一「点击展开」按钮。
+ * 1. 使用 px 绝对高度动画（脱离 vw 在大屏手机/PC端的比例膨胀），展开后零多余空白；
+ * 2. 渐隐遮罩（三层无 id 半透明 <rect>）与「点击展开」提示均置于 <svg> 内部：
+ *    点击即可 100% 触发 <svg> focusin，展开高度的同时将遮罩+按钮彻底隐藏（opacity:0 + visibility:hidden），正文 100% 清晰；
+ * 3. 底部留有极简透明收起热区（tabindex="0"），点击即可触发 focusout 平滑收起。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -43,35 +44,31 @@ function getImageDimensions(src, baseDir = process.cwd()) {
 	return null;
 }
 
-/** 估算内部 HTML 在 390px 手机视口（容器宽 358px，净宽约 330px）下的精确渲染高度（px） */
+/** 估算内部 HTML 在标准移动端容器（内容净宽约 330px）下的精确渲染高度（px） */
 function estimateContentHeightPx(body, title, baseDir) {
 	let px = 28; // 上下 padding: 14px * 2
 	if (title) {
 		const titleUnits = [...title].reduce((acc, ch) => acc + (/[\x00-\xff]/.test(ch) ? 0.56 : 1), 0);
 		const titleLines = Math.max(1, Math.ceil(titleUnits / 22.5));
-		px += titleLines * 23 + 8; // line-height: 1.6 (~23px) + margin-bottom: 8px
+		px += titleLines * 23 + 8;
 	}
 
 	const lines = body.split(/\r?\n/);
 	let inCode = false;
-	let prevWasBlank = true;
 	let inParagraph = false;
 
-	for (let idx = 0; idx < lines.length; idx++) {
-		const raw = lines[idx];
+	for (const raw of lines) {
 		const trimmed = raw.trim();
 		if (trimmed.startsWith("```")) {
 			inCode = !inCode;
-			px += inCode ? 10 : 18;
-			prevWasBlank = false;
+			px += inCode ? 10 : 16;
 			continue;
 		}
 		if (!trimmed) {
 			if (inParagraph) {
-				px += 8; // 段落 margin-bottom: 8px
+				px += 8;
 				inParagraph = false;
 			}
-			prevWasBlank = true;
 			continue;
 		}
 		const imgMatch = trimmed.match(/^!\[[^\]]*\]\(([^)\s]+)\)/);
@@ -83,29 +80,25 @@ function estimateContentHeightPx(body, title, baseDir) {
 			const dim = getImageDimensions(imgMatch[1], baseDir);
 			if (dim && dim.width > 0) {
 				const renderedH = Math.round((330 / dim.width) * dim.height);
-				px += renderedH + 12;
+				px += renderedH + 10;
 			} else {
 				px += 240;
 			}
-			prevWasBlank = false;
 			continue;
 		}
 
-		// 330px 净宽 / 14.5px 字号 ≈ 22.5 汉字/行，line-height: 1.65 (24px)
+		// 按 330px 净宽、14.5px 字号估算（约 22.5 汉字/行），行高 24px
 		const charUnits = [...trimmed].reduce((acc, ch) => acc + (/[\x00-\xff]/.test(ch) ? 0.56 : 1), 0);
 		const wrapCount = Math.max(1, Math.ceil(charUnits / (inCode ? 36 : 22.5)));
 		px += wrapCount * (inCode ? 19 : 24);
 		inParagraph = !inCode;
-		prevWasBlank = false;
 	}
 
-	// 最后一行若在段落中，包含最后一个 <p> 的 margin-bottom: 8px，但仅需 +4px 呼吸余量即可
-	return Math.max(px + 12, 96);
+	return Math.max(px + 6, 90);
 }
 
 /** 将内部 Markdown 渲染为微信安全的内联 <section class="custom-details-content"> HTML */
 function renderInnerHtml(body, title) {
-	// 预先将 Markdown 列表转为带符号普通段落，防止微信自动插入空 <li><section> 撑爆高度
 	const normalizedLines = body.split(/\r?\n/).map((line) => {
 		const ulMatch = line.match(/^\s*[-*]\s+(.+)$/);
 		if (ulMatch) return `• ${ulMatch[1]}`;
@@ -115,7 +108,6 @@ function renderInnerHtml(body, title) {
 	const preprocessed = normalizedLines.map((l) => cjkStrong(l)).join("\n");
 	let html = foldMd.render(preprocessed);
 
-	// 兜底把残余的 <ul>/<ol>/<li> 扁平化为 <p>
 	html = html
 		.replace(/<\/?(?:ul|ol)[^>]*>/gi, "")
 		.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '<p style="margin: 0 0 6px; padding-left: 8px; font-size: 14.5px; line-height: 1.65; color: #111819;">$1</p>')
@@ -132,44 +124,51 @@ function renderInnerHtml(body, title) {
 		? `<p style="margin: 0 0 8px; font-size: 14.5px; line-height: 1.6; font-weight: 700; color: #111819;"><strong>${xml(title)}</strong></p>`
 		: "";
 
-	// 使用 <section> 而不是 <div>，微信后台不会剥离外层 <section> 的 padding
 	return `<section class="custom-details-content" style="padding: 14px 14px; font-size: 14.5px; line-height: 1.65; color: #111819; background: #fafbfc; box-sizing: border-box;">${titleHtml}${html}</section>`;
 }
 
 export function renderSvgFold(body, fail, title = "", baseDir = process.cwd()) {
 	const totalPx = estimateContentHeightPx(body, title, baseDir);
-	const collapsePx = 175;
+	const collapsePx = 165;
 	const needsFold = totalPx > collapsePx + 30;
 
-	const collapsedVw = needsFold ? ((collapsePx / 390) * 100).toFixed(1) : ((totalPx / 390) * 100).toFixed(1);
-	const expandedVw = ((totalPx / 390) * 100).toFixed(1);
+	const startH = needsFold ? collapsePx : totalPx;
+	const endH = totalPx;
 
 	const innerHtml = renderInnerHtml(body, title);
 
-	// 无 id 三层半透明矩形叠加渐隐（100% 免疫微信清洗 linearGradient id）
-	const gradientOverlay = needsFold
-		? `<g opacity="1" style="pointer-events: none;">
-      <animate attributeName="opacity" begin="focusin" values="1;0" dur="0.22s" fill="freeze" restart="whenNotActive"/>
-      <animate attributeName="opacity" begin="focusout" values="0;1" dur="0.22s" fill="freeze" restart="whenNotActive"/>
-      <rect x="0" y="55%" width="100%" height="15%" fill="#fafbfc" fill-opacity="0.38"/>
-      <rect x="0" y="70%" width="100%" height="15%" fill="#fafbfc" fill-opacity="0.70"/>
-      <rect x="0" y="85%" width="100%" height="15%" fill="#fafbfc" fill-opacity="0.94"/>
+	// 热区 A（展开前覆盖下半部分）：三层半透明渐隐 + 居中「点击展开」药丸提示，全部置于 <svg> 内部！
+	// 点击它即触发 <svg> 的 focusin：展开高度的同时，自身 opacity 归 0 且 visibility 设为 hidden 彻底消失！
+	const foldOverlayInSvg = needsFold
+		? `<g opacity="1" visibility="visible">
+      <animate attributeName="opacity" begin="focusin" values="1;0" dur="0.18s" fill="freeze" restart="whenNotActive"/>
+      <set attributeName="visibility" to="hidden" begin="focusin" fill="freeze"/>
+      <animate attributeName="opacity" begin="focusout" values="0;1" dur="0.2s" fill="freeze" restart="whenNotActive"/>
+      <set attributeName="visibility" to="visible" begin="focusout" fill="freeze"/>
+      <rect x="0" y="45%" width="100%" height="18%" fill="#fafbfc" fill-opacity="0.40"/>
+      <rect x="0" y="63%" width="100%" height="18%" fill="#fafbfc" fill-opacity="0.75"/>
+      <rect x="0" y="81%" width="100%" height="19%" fill="#fafbfc" fill-opacity="0.96"/>
+      <foreignObject x="0" y="56%" width="100%" height="28%">
+        <section style="text-align: center; padding-top: 6px; background: transparent;">
+          <span style="display: inline-block; padding: 3px 16px; border: 1px solid #c7d1d1; border-radius: 16px; background: #ffffff; font-size: 12px; font-weight: 600; line-height: 1.4; color: #007275;">点击展开</span>
+        </section>
+      </foreignObject>
     </g>`
 		: "";
 
-	// 底部仅保留唯一「点击展开」按钮
-	const foldBtnHtml = needsFold
-		? `<p class="wx-fold-hint" style="margin: 0; padding: 6px 12px 10px; text-align: center; background: #fafbfc; border-top: 1px dashed #e2e8e8;"><span class="wx-fold-btn" tabindex="0" style="display: inline-block; padding: 3px 16px; border: 1px solid #c7d1d1; border-radius: 16px; background: #ffffff; font-size: 12px; font-weight: 600; line-height: 1.5; color: #007275; outline: none; -webkit-tap-highlight-color: transparent;"><span leaf="">点击展开</span></span></p>`
+	// 热区 B（展开后起作用）：置于 <svg> 外部底端的纯透明小热区，点一下即可把焦点移出 <svg> 触发 focusout 收起（无任何文字、边框与透明遮罩）
+	const transparentCollapseHotspot = needsFold
+		? `<p style="margin: -16px 0 0; padding: 0; height: 16px; background: transparent; position: relative; z-index: 2;"><span class="wx-fold-hotspot" tabindex="0" style="display: block; width: 100%; height: 16px; border: none; background: transparent; outline: none; -webkit-tap-highlight-color: transparent;"></span></p>`
 		: "";
 
 	return `<section class="custom-details-preview-box" style="margin: 14px 0; border: 1px solid #d8dfdf; border-radius: 8px; background: #fafbfc; overflow: hidden;">
-<svg class="wx-fold-outer" tabindex="0" xmlns="http://www.w3.org/2000/svg" width="100%" height="${collapsedVw}vw" style="display: block; width: 100%; max-width: 100%; overflow: hidden; background: #fafbfc; outline: none; -webkit-tap-highlight-color: transparent;">
-  <animate attributeName="height" attributeType="XML" begin="focusin" values="${collapsedVw}vw;${expandedVw}vw" dur="0.28s" fill="freeze" restart="whenNotActive"/>
-  <animate attributeName="height" attributeType="XML" begin="focusout" values="${expandedVw}vw;${collapsedVw}vw" dur="0.22s" fill="freeze" restart="whenNotActive"/>
+<svg class="wx-fold-outer" tabindex="0" xmlns="http://www.w3.org/2000/svg" width="100%" height="${startH}px" style="display: block; width: 100%; max-width: 100%; overflow: hidden; background: #fafbfc; outline: none; -webkit-tap-highlight-color: transparent;">
+  <animate attributeName="height" attributeType="XML" begin="focusin" values="${startH}px;${endH}px" dur="0.26s" fill="freeze" restart="whenNotActive"/>
+  <animate attributeName="height" attributeType="XML" begin="focusout" values="${endH}px;${startH}px" dur="0.22s" fill="freeze" restart="whenNotActive"/>
   <foreignObject width="100%" height="100%" x="0" y="0">
     ${innerHtml}
   </foreignObject>
-  ${gradientOverlay}
-</svg>${foldBtnHtml}
+  ${foldOverlayInSvg}
+</svg>${transparentCollapseHotspot}
 </section>`;
 }
