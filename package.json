@@ -1,5 +1,5 @@
 {
-  "name": "mpress",
+  "name": "@shxuk/mpress",
   "version": "1.2.0",
   "description": "Markdown to WeChat Official Account typesetter: inline HTML, editorial cards, native SVG folds, 1800x766 cover, idempotent draft publishing. Pure script, no LLM in the loop.",
   "type": "module",
