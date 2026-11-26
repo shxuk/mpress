@@ -408,7 +408,7 @@ export function figureHtml(alt, src, caption) {
 export function chapterHtml(no, text, isFirst = false) {
 	const style = isFirst ? ' style="margin-top: 8px;"' : "";
 	return compactHtml(
-		`<section class="wx-h2"${style}><table class="wx-h2-table"><tbody><tr><td class="wx-h2-no-td"><span class="wx-h2-no">${xml(no)}</span></td><td class="wx-h2-text-td"><span class="wx-h2-text">${compText(text)}</span></td></tr></tbody></table></section>`,
+		`<section class="wx-h2"${style}><table class="wx-h2-table" style="width: auto;"><tbody><tr><td class="wx-h2-no-td" width="34"><span class="wx-h2-no">${xml(no)}</span></td><td class="wx-h2-text-td"><span class="wx-h2-text">${compText(text)}</span></td></tr></tbody></table></section>`,
 	);
 }
 
