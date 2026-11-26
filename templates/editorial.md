@@ -114,9 +114,9 @@ A：如果答案是“不会”，那么这个缺口就是未来三个月最该�
 03 | 最终决定输赢的依然是产品与服务本身 | 真正帮细分客户解决难题、并把实力和边界说清楚的公司更容易脱颖而出。
 :::
 
-::: githubcard shxuk/wechat-article-publisher :::
+::: githubcard shxuk/mpress :::
 
-::: githubreadme shxuk/wechat-article-publisher
+::: githubreadme shxuk/mpress
 仓库定位：Markdown 一键转微信公众号纯内联 HTML，并支持幂等更新草稿箱。
 核心能力：自动合成 2.35:1 高清头图 + 1:1 智能裁切 + 双层 SVG 渐隐折叠 + 杂志风 2.0 组件。
 :::

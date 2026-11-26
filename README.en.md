@@ -1,18 +1,12 @@
-# wechat-article-publisher
+# mpress
 
 [简体中文](./README.md) | English
 
-Publishing Markdown articles to a WeChat Official Account (微信公众号) is notoriously tedious: pasted formatting breaks, JavaScript is stripped (breaking interactive toggles), cover images need manual text overlays every time, and re-uploading after fixing a typo creates duplicate drafts.
+`mpress` typesets Markdown into a WeChat Official Account (微信公众号) article and pushes it to the draft box — in about five seconds. It is both an **Agent Skill** and a **CLI**.
 
-This tool & AI Agent Skill automates the entire pipeline while keeping your source Markdown **strictly read-only**:
-1. **Editorial Magazine 2.0 components**: supports canonical kicker header bars (`::: kicker`), bold lead takeaways (`::: lead`), mobile-friendly metrics (`::: metrics`), side-by-side comparison cards (`::: versus`), verdict cards (`::: verdict`), and structured Q&A (`::: qa`).
-2. **Dual-layer SVG translucent preview fold & GitHub cards**: supports `::: details` translucent gradient preview folds (no redundant header bar, full-block click to expand, bottom-right button to collapse, zero modal popup), `::: githubcard`, and `::: follow` author cards.
-3. **Automated cover generation & 1:1 smart crop**: renders a 2.35:1 (1800×766) cover image via headless Chrome/Edge from `templates/template-*.html` (including Template-D Pro Editorial & Template-E 3D Geometric Bookshelf styles), injecting WeChat 1:1 square crop coordinates automatically to preserve branding without truncation.
-4. **Idempotent draft publishing**: uploads local images to WeChat's media library with hash caching, and updates the existing draft (`media_id`) on repeated pushes.
+WeChat strips external CSS and JavaScript, so everything has to be inlined; pasting Markdown into the editor loses your layout, images need re-uploading one by one, and every fix after a typo creates a duplicate draft. `mpress` automates the whole pipeline while keeping your source Markdown **strictly read-only** — it never rewrites, retitles or re-paragraphs your text.
 
----
-
-## Visual Showcase
+> Renamed from `wechat-article-publisher` in Nov 2026. Old URLs redirect.
 
 <div align="center">
   <img src="./assets/preview-components.png" alt="Editorial 2.0 Components Preview" width="460" />
@@ -24,45 +18,71 @@ This tool & AI Agent Skill automates the entire pipeline while keeping your sour
 
 ---
 
+## What it does
+
+1. **Editorial components**: kicker header bars (`::: kicker`), bold lead takeaways (`::: lead`), mobile-friendly metrics (`::: metrics`), side-by-side comparison cards (`::: versus`), verdict cards (`::: verdict`), structured Q&A (`::: qa`), checklists, dossiers, steps.
+2. **Native SVG folds + GitHub cards**: dual-layer translucent `::: details` folds that actually expand inside WeChat (no JS needed), plus `::: githubcard` and `::: follow` author cards.
+3. **Automatic cover**: renders a 2.35:1 (1800×766) cover via headless Chrome/Edge from `templates/template-*.html`, with automatic font shrinking and truncation, and injects WeChat's 1:1 crop coordinates.
+4. **Idempotent draft publishing**: uploads local images to WeChat's media library with hash caching, and updates the existing draft (`media_id`) on repeated pushes.
+
+**Deterministic by design**: no LLM runs at render time. Same Markdown in, byte-identical `body.html` out. `layout.json` records which rule fired on which source line.
+
+---
+
 ## Quick Start
 
 ```bash
-# 1. Install dependencies (pure native lightweight markdown-it + juice engine)
-pnpm install
+# Install as an Agent Skill (Claude Code, Cursor, Codex, OpenClaw, …)
+npx skills add shxuk/mpress
+```
 
-# 2. Generate local HTML preview from the standard template (offline)
+```bash
+# Or use the CLI directly — offline preview, no keys required
+git clone https://github.com/shxuk/mpress.git
+cd mpress
+npm install
 node scripts/wechat.mjs gen templates/editorial.md
 ```
 
-Outputs are written to `~/.wechat-article/work/<slug>/` (configurable via `WECHAT_WORK_DIR`):
-- `body.html`: final WeChat-ready inline HTML
-- `layout.json`: line-by-line rule match report
-- `meta.json`: extracted title, cover, and SVG metadata
+Outputs go to `~/.wechat-article/work/<slug>/` (configurable via `WECHAT_WORK_DIR`):
 
-### Push to WeChat Drafts
+- `body.html`: the WeChat-ready inline HTML
+- `layout.json`: line-by-line rule match report
+- `meta.json`: extracted title, cover, and asset metadata
+
+### Push to WeChat drafts
 
 ```bash
-cp .env.example .env
-# Fill in WECHAT_APP_ID and WECHAT_APP_SECRET, then:
+export WECHAT_APP_ID=...
+export WECHAT_APP_SECRET=...
 node scripts/wechat.mjs push path/to/your-post.md
 ```
+
+You need a verified Official Account, its AppID / AppSecret, and the machine's egress IP on the API whitelist. `mpress` only creates or updates **drafts** — it never mass-sends.
 
 ---
 
 ## How It Works
 
-1. **Fixed template expansion**: parses Markdown according to `templates/editorial.md` — converting every `##` heading into a `01` teal square tab, `###` into a left-bordered subheading, plus callouts (`TIP`/`NOTE`/`WARNING`/`IMPORTANT`), `::: githubcard`, `::: details` translucent preview folds, and attributed quotes.
-2. **Inline CSS rendering**: uses `juice` with `assets/theme.css` to inline all styles directly and patches SVG height attributes so `focusin`/`focusout` animations work natively inside WeChat.
-3. **Cover compositing & smart crop**: renders `templates/template-*.html` at 1800×766 via Chrome (with automatic Edge fallback) and auto-injects WeChat 1:1 square crop coordinates focusing on the right spec card to avoid cutting off titles.
-4. **Media & draft sync**: uploads local images once (cached by content hash) and creates or updates the draft via the Official Account API.
+1. **Fixed template expansion**: parses Markdown per `templates/editorial.md` — every `##` becomes a numbered teal tab, `###` a left-bordered subheading, plus callouts (`TIP`/`NOTE`/`WARNING`/`IMPORTANT`), `::: githubcard`, `::: details` folds, and attributed quotes.
+2. **Inline CSS rendering**: uses `juice` with `assets/theme.css` to inline all styles and patches SVG height attributes so the fold animations work natively inside WeChat.
+3. **Cover compositing**: renders `templates/template-*.html` at 1800×766 via Chrome (with Edge fallback).
+4. **Media & draft sync**: uploads local images once (cached by content hash), then creates or updates the draft via the Official Account API.
+
+Exit codes: `2` credentials · `3` IP whitelist · `4` images · `5` structure · `6` network.
 
 ---
 
 ## Repository Layout
 
 - `scripts/wechat.mjs`: main CLI (`gen` / `push`)
-- `components/`: `cards.mjs` (cards, callouts, quotes, code blocks) and `svg-fold.mjs` (dual-layer SVG translucent preview fold)
-- `assets/`: `theme.css`, default cover/base images
-- `templates/`: `editorial.md` (canonical template & visual spec) and cover HTML templates (`template-a/b/c.html`)
-- `docs/`: visual specs and historical references
-- `SKILL.md`: AI Agent Skill specification
+- `components/`: `cards.mjs` (cards, callouts, quotes, code blocks) and `svg-fold.mjs` (dual-layer SVG fold)
+- `assets/`: `theme.css`, cover base images, component screenshots
+- `templates/`: `editorial.md` (canonical syntax) and cover HTML templates
+- `docs/`: visual specs and real article samples
+- `SKILL.md`: Agent Skill specification
+- `llms.txt`: machine-readable project summary
+
+## License
+
+MIT

@@ -50,7 +50,7 @@ function renderCard(innerHtml, outPngPath, width = 520, minHeight = 100) {
 }
 
 async function main() {
-	const bodyHtmlPath = "y:/06_services/wechat-article-publisher/work/editorial/body.html";
+	const bodyHtmlPath = "y:/06_services/mpress/work/editorial/body.html";
 	const compDir = path.resolve("assets/components");
 	if (!fs.existsSync(compDir)) fs.mkdirSync(compDir, { recursive: true });
 

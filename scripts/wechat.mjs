@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * wechat-publisher 的唯一入口，两个动作：
+ * mpress 的唯一入口，两个动作：
  *
  *   node scripts/wechat.mjs gen  <任意.md> [--source-url URL]   固定模板渲染 + 内联 HTML + layout.json
  *   node scripts/wechat.mjs push <任意.md> [--source-url URL]   渲染 + 换图片地址 + 合成头图 + 新建/更新草稿

@@ -56,7 +56,7 @@ Q：为什么文章排版一定要用纯内联样式的双栏表格？
 A：微信公众平台的富文本渲染引擎会严格过滤现代 CSS Grid 和 Flexbox 属性。使用带固定样式的原生 table 标签是保证全端 100% 垂直居中且不掉行的终极方案。
 :::
 
-::: githubreadme shxuk/wechat-article-publisher
+::: githubreadme shxuk/mpress
 仓库定位：Markdown 一键转微信公众号纯内联 HTML，并支持幂等更新草稿箱。
 核心能力：自动合成 2.35:1 高清头图 + 1:1 智能裁切 + 双层 SVG 渐隐折叠 + 杂志风 2.0 组件。
 :::
