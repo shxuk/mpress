@@ -37,10 +37,22 @@ export function cjkStrong(text) {
 		return `\uE000CODE${idx}\uE001`;
 	});
 	const strongified = masked.replace(
-		/(?<!\*)\*\*(?!\s|\*)((?:[^*\n]|(?<!\*)\*(?!\*))*?[^\s*])\*\*(?!\*)/g,
+		/\*\*([^\n*]+?)\*\*/g,
 		"<strong>$1</strong>",
 	);
 	return strongified.replace(/\uE000CODE(\d+)\uE001/g, (_, idx) => codeTokens[Number(idx)]);
+}
+
+/** 解析键值对行（兼容 **Key：** Val、**Key**：Val、Key：Val） */
+export function parseKv(line, maxKeyLen = 20) {
+	const clean = line.trim();
+	const m = clean.match(/^(?:\*\*)?([^：:*]{1,32}?)(?:\*\*)?[：:]\s*(?:\*\*)?\s*(.+)$/);
+	if (m && m[1].length <= maxKeyLen) {
+		const key = m[1].replace(/^\*\*|\*\*$/g, "").trim();
+		const val = m[2].replace(/^\*\*|\*\*$/g, "").trim();
+		return { key, val };
+	}
+	return null;
 }
 
 /** 组件内的行内富文本：还原实体 → 转义 → 处理反引号行内代码与加粗 */
@@ -163,9 +175,9 @@ export function dossierHtml(lines, sectionTitle = "") {
 			const badgeHtml = badge ? `<span class="wx-dossier-badge">${xml(badge)}</span>` : "";
 			const rows = rest
 				.map((line) => {
-					const m = line.match(/^([^：:]{1,16})[：:]\s*(.+)$/);
-					if (m) {
-						return `<p class="wx-dossier-row"><span class="wx-dossier-key">${xml(m[1])}</span><span class="wx-dossier-val">${compText(m[2])}</span></p>`;
+					const kv = parseKv(line, 16);
+					if (kv) {
+						return `<p class="wx-dossier-row"><span class="wx-dossier-key">${compText(kv.key)}</span><span class="wx-dossier-val">${compText(kv.val)}</span></p>`;
 					}
 					return `<p class="wx-dossier-row">${compText(line)}</p>`;
 				})
@@ -197,9 +209,9 @@ export function versusHtml(lines, sectionTitle = "") {
 			const tagHtml = tag ? `<span class="wx-versus-tag">${xml(tag)}</span>` : "";
 			const rows = rest
 				.map((line) => {
-					const m = line.match(/^([^：:]{1,16})[：:]\s*(.+)$/);
-					if (m) {
-						return `<p class="wx-versus-row"><strong class="wx-versus-k">${xml(m[1])}：</strong>${compText(m[2])}</p>`;
+					const kv = parseKv(line, 16);
+					if (kv) {
+						return `<p class="wx-versus-row"><strong class="wx-versus-k">${compText(kv.key)}：</strong>${compText(kv.val)}</p>`;
 					}
 					return `<p class="wx-versus-row">${compText(line)}</p>`;
 				})
@@ -224,9 +236,9 @@ export function checklistHtml(lines, title = "行动底牌清单") {
 	const rows = items
 		.map((item, idx) => {
 			const no = String(idx + 1).padStart(2, "0");
-			const m = item.match(/^([^：:]{2,28})[：:]\s*(.+)$/);
-			const content = m
-				? `<p class="wx-check-title">${compText(m[1])}</p><p class="wx-check-desc">${compText(m[2])}</p>`
+			const kv = parseKv(item, 28);
+			const content = kv
+				? `<p class="wx-check-title">${compText(kv.key)}</p><p class="wx-check-desc">${compText(kv.val)}</p>`
 				: `<p class="wx-check-desc">${compText(item)}</p>`;
 			return `<section class="wx-check-item"><table class="wx-check-table"><tbody><tr><td class="wx-check-no-td"><span class="wx-check-no">${no}</span></td><td class="wx-check-body-td">${content}</td></tr></tbody></table></section>`;
 		})
