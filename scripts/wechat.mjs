@@ -19,19 +19,29 @@ import {
 	blockHtml,
 	boxHtml,
 	chapterHtml,
+	checklistHtml,
 	cjkStrong,
 	codeHtml,
 	compText,
+	dossierHtml,
 	figureHtml,
+	followHtml,
 	githubCardHtml,
+	kickerHtml,
+	leadHtml,
+	metricsHtml,
+	qaHtml,
 	quoteHtml,
+	stepsHtml,
+	verdictHtml,
+	versusHtml,
 } from "../components/cards.mjs";
 import { renderSvgFold } from "../components/svg-fold.mjs";
 
 const md = new MarkdownIt({
 	html: true,
 	breaks: true,
-	linkify: true,
+	linkify: false,
 });
 
 const SKILL_DIR = path.resolve(import.meta.dirname, "..");
@@ -206,6 +216,15 @@ function expandComponents(body) {
 			const argText = bracketArg || cleanRest;
 			const openLine = i;
 
+			if (kind === "kicker" && hasTrailingColons) {
+				mapped("container:kicker", openLine);
+				i++;
+				gap();
+				out.push(kickerHtml([], argText));
+				out.push("");
+				continue;
+			}
+
 			if (kind === "githubcard" && hasTrailingColons) {
 				mapped("container:githubcard", openLine);
 				i++;
@@ -224,6 +243,86 @@ function expandComponents(body) {
 			if (j >= lines.length) fail("结构", "::: 容器没有闭合", "补一行单独的 :::");
 			i = j + 1;
 
+			if (kind === "kicker") {
+				mapped("container:kicker", openLine);
+				gap();
+				out.push(kickerHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
+			if (kind === "follow") {
+				mapped("container:follow", openLine);
+				gap();
+				out.push(followHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
+			if (kind === "lead") {
+				mapped("container:lead", openLine);
+				gap();
+				out.push(leadHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
+			if (kind === "metrics") {
+				mapped("container:metrics", openLine);
+				gap();
+				out.push(metricsHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
+			if (kind === "dossier") {
+				mapped("container:dossier", openLine);
+				gap();
+				out.push(dossierHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
+			if (kind === "versus") {
+				mapped("container:versus", openLine);
+				gap();
+				out.push(versusHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
+			if (kind === "checklist") {
+				mapped("container:checklist", openLine);
+				gap();
+				out.push(checklistHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
+			if (kind === "steps") {
+				mapped("container:steps", openLine);
+				gap();
+				out.push(stepsHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
+			if (kind === "verdict") {
+				mapped("container:verdict", openLine);
+				gap();
+				out.push(verdictHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
+			if (kind === "qa") {
+				mapped("container:qa", openLine);
+				gap();
+				out.push(qaHtml(buf, argText));
+				out.push("");
+				continue;
+			}
+
 			if (kind === "githubcard") {
 				mapped("container:githubcard", openLine);
 				gap();
@@ -232,16 +331,47 @@ function expandComponents(body) {
 				continue;
 			}
 
-			if (kind === "details") {
-				mapped("container:details", openLine);
+			if (["githubreadme", "githubreadme-preview", "githubreadmepreview", "githubreadme:preview"].includes(kind)) {
+				mapped("container:githubreadme", openLine);
 				gap();
-				out.push(renderSvgFold(buf.join("\n"), fail));
+				const cleanRepo = argText.replace(/--preview|preview/gi, "").trim();
+				out.push(renderSvgFold(buf.join("\n"), fail, cleanRepo ? `README · ${cleanRepo}` : "README"));
 				out.push("");
 				continue;
 			}
 
-			if (kind === "caution" || BOX_KINDS[kind.toUpperCase()]) {
-				const boxKind = kind === "caution" ? "warning" : BOX_KINDS[kind.toUpperCase()];
+			if (["details", "details-preview", "detailspreview", "details:preview"].includes(kind)) {
+				mapped("container:details", openLine);
+				gap();
+				out.push(renderSvgFold(buf.join("\n"), fail, argText));
+				out.push("");
+				continue;
+			}
+
+			const ADMONITION_ALIAS = {
+				caution: "warning",
+				danger: "warning",
+				failure: "warning",
+				missing: "warning",
+				fail: "warning",
+				error: "warning",
+				bug: "warning",
+				attention: "warning",
+				info: "note",
+				abstract: "note",
+				summary: "note",
+				tldr: "note",
+				example: "note",
+				question: "tip",
+				help: "tip",
+				faq: "tip",
+				success: "tip",
+				check: "tip",
+				done: "tip",
+				todo: "important",
+			};
+			if (ADMONITION_ALIAS[kind] || BOX_KINDS[kind.toUpperCase()]) {
+				const boxKind = ADMONITION_ALIAS[kind] || BOX_KINDS[kind.toUpperCase()];
 				mapped(`container:${kind}`, openLine);
 				gap();
 				out.push(boxHtml(boxKind, buf, argText));
@@ -331,13 +461,15 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 二级标题（唯一样式）：全部输出墨青色正方形数字页签（01、02...）
+		// 二级标题（唯一样式）：全部输出墨青色正方形数字页签（01、02...），并自动剥离冗余的中文/阿拉伯序号（如「一、」「1.」）
 		const h2Match = line.match(/^##\s+(?:(\d{1,2})\s+)?(\S.*)$/);
 		if (h2Match) {
 			mapped("chapter-tab", i);
 			gap();
 			let no = h2Match[1];
-			const titleText = h2Match[2].trim();
+			let titleText = h2Match[2].trim();
+			// 若未显式写阿拉伯编号，剥除前导「一、」「二、」「1.」「01、」防止与墨青方块页签重复
+			titleText = titleText.replace(/^(?:[一二三四五六七八九十百]+[、.．]\s*|\d{1,2}[、.．]\s*)/, "").trim();
 			if (no) {
 				no = String(parseInt(no, 10)).padStart(2, "0");
 				h2Counter = parseInt(no, 10) + 1;
@@ -535,9 +667,20 @@ function buildArticle(source, sourceUrl) {
 
 	const summary = (data.description || data.summary || data.digest || "").trim();
 	const book = (data.banner?.book || data.book || bookTitleOf(abs) || "").trim();
+	const chapterTitle = title;
+	// 书稿文章在公众号标题自动带上书名：「书名 ：章标题」
+	if (book && !title.includes(book)) {
+		title = `${book} ：${title}`;
+	}
 	const tags = Array.isArray(data.tags) ? data.tags : data.tags ? [String(data.tags)] : [];
 	const category = (data.category || "").trim();
 	const seriesOrder = (data.seriesOrder || "").trim();
+	const seriesTotal = (data.seriesTotal || "").trim();
+	const coverTemplate = (data.coverTemplate || data.cover_template || "").trim().toLowerCase();
+	const coverSubtitle = (data.coverSubtitle || data.cover_subtitle || "").trim();
+	const coverStatNum = (data.coverStatNum || data.cover_stat_num || "").trim();
+	const coverStatCaption = (data.coverStatCaption || data.cover_stat_caption || "").trim();
+	const coverStatTag = (data.coverStatTag || data.cover_stat_tag || "").trim();
 	const headBase = process.env.WECHAT_HEAD_BASE
 		? path.resolve(CWD, process.env.WECHAT_HEAD_BASE)
 		: resolveAsset((data.banner?.image || "").trim(), abs) ||
@@ -588,6 +731,7 @@ function buildArticle(source, sourceUrl) {
 		dir,
 		slug,
 		title,
+		chapterTitle,
 		cover,
 		headBase,
 		summary,
@@ -595,6 +739,12 @@ function buildArticle(source, sourceUrl) {
 		tags,
 		category,
 		seriesOrder,
+		seriesTotal,
+		coverTemplate,
+		coverSubtitle,
+		coverStatNum,
+		coverStatCaption,
+		coverStatTag,
 		sourceUrl,
 		images,
 		inlineSvg,
@@ -783,8 +933,15 @@ document.documentElement.dataset.headSize = String(Math.round(size));
 }
 
 async function buildHeadImage(built) {
-	const tplChoice = (process.env.WECHAT_COVER_TEMPLATE || "c").toLowerCase();
-	const tplName = tplChoice === "b" ? "template-b.html" : tplChoice === "c" ? "template-c.html" : "template-a.html";
+	const tplChoice = (built.coverTemplate || process.env.WECHAT_COVER_TEMPLATE || "e").toLowerCase();
+	const tplMap = {
+		a: "template-a.html",
+		b: "template-b.html",
+		c: "template-c.html",
+		d: "template-d.html",
+		e: "template-e.html",
+	};
+	const tplName = tplMap[tplChoice] || "template-e.html";
 	const tplPath = path.join(SKILL_DIR, "templates", tplName);
 
 	const tag = (built.tags && built.tags[0]) || built.category || "ESSAY · 观点";
@@ -804,24 +961,54 @@ async function buildHeadImage(built) {
 			if (u) siteDomain = new URL(u).hostname;
 		} catch {}
 	}
-	if (!siteDomain) siteDomain = "example.com";
+	if (!siteDomain) siteDomain = "shxuk.cn";
 
 	const isBook = Boolean(built.book);
-	const spineText = isBook ? `${brandUpper} · 专著` : `${brandUpper} · 散篇`;
-	const eyebrow = isBook ? `BOOK · ${built.book}` : "PERSPECTIVE · 思考与观察";
+	const isTool =
+		built.category === "工具" ||
+		built.tags.some((t) => /工具|开源|CLI|Lab/i.test(t)) ||
+		/工具|开源|template|color-system/i.test(built.title);
+	const coverMode = isBook ? "book" : isTool ? "tool" : "essay";
+	let bookPalette = "墨青";
+	if (/GEO|AI-SEO|AI 搜索/i.test(built.book)) bookPalette = "墨蓝";
+	else if (/文案|写作|copywriting/i.test(built.book)) bookPalette = "墨色";
+	else if (/协作|coding/i.test(built.book)) bookPalette = "暖米";
+	const bookTag = /GEO|AI-SEO/i.test(built.book) ? "AI-SEO" : /文案/i.test(built.book) ? "COPY" : "BOOK";
+
+	const spineText = isBook ? `${brandUpper} · 专著` : `${brandUpper} · 深度专题`;
+	const eyebrow = isBook ? `BOOK · ${built.book}` : isTool ? "TOOL · 工程与开源" : "ESSAY · 思考与观察";
+	const issueShort = built.seriesOrder ? String(built.seriesOrder).padStart(2, "0") : String(now.getMonth() + 1).padStart(2, "0");
 	const issueNo =
 		process.env.WECHAT_ISSUE ||
-		(built.seriesOrder ? `CH. ${String(built.seriesOrder).padStart(2, "0")}` : `NO. ${String(now.getMonth() + 1).padStart(2, "0")}`);
+		(built.seriesOrder
+			? built.seriesTotal
+				? `CH. ${Number(built.seriesOrder)}/${built.seriesTotal}`
+				: `CH. ${issueShort}`
+			: `NO. ${issueShort}`);
 	const footerSlogan = isBook ? "独立博客 · 专栏书稿连载" : "独立博客 · 深度长文阅读";
+	const coverSubtitle = built.coverSubtitle || built.summary || "";
+	const coverStatTag = built.coverStatTag || "KEY SIGNAL";
+	const coverStatNum = built.coverStatNum || issueShort;
+	const coverStatCaption = built.coverStatCaption || built.title.slice(0, 18);
+	const coverHeading = built.chapterTitle || built.title;
+	const titleShort = coverHeading.replace(/^[^：:]+[：:]\s*/, "").slice(0, 18);
+	const bookOrTag = isBook ? built.book : isTool ? "开源工具 · TOOL" : `观点长文 · ${tag}`;
 
 	let html = "";
 	if (fs.existsSync(tplPath)) {
 		html = fs
 			.readFileSync(tplPath, "utf8")
-			.replaceAll("{{TITLE}}", esc(built.title))
+			.replaceAll("{{TITLE}}", esc(coverHeading))
+			.replaceAll("{{TITLE_SHORT}}", esc(titleShort))
+			.replaceAll("{{BOOK_OR_TAG}}", esc(bookOrTag))
+			.replaceAll("{{BOOK_TITLE}}", esc(built.book || built.title))
+			.replaceAll("{{BOOK_TAG}}", esc(bookTag))
+			.replaceAll("{{BOOK_PALETTE}}", esc(bookPalette))
+			.replaceAll("{{COVER_MODE}}", esc(coverMode))
 			.replaceAll("{{TAG}}", esc(tag))
 			.replaceAll("{{ISSUE}}", esc(issue))
 			.replaceAll("{{ISSUE_DATE}}", esc(issueDate))
+			.replaceAll("{{ISSUE_SHORT}}", esc(issueShort))
 			.replaceAll("{{YEAR}}", esc(year))
 			.replaceAll("{{BRAND}}", esc(brand))
 			.replaceAll("{{BRAND_UPPER}}", esc(brandUpper))
@@ -831,6 +1018,10 @@ async function buildHeadImage(built) {
 			.replaceAll("{{EYEBROW}}", esc(eyebrow))
 			.replaceAll("{{ISSUE_NO}}", esc(issueNo))
 			.replaceAll("{{FOOTER_SLOGAN}}", esc(footerSlogan))
+			.replaceAll("{{COVER_SUBTITLE}}", esc(coverSubtitle))
+			.replaceAll("{{COVER_STAT_TAG}}", esc(coverStatTag))
+			.replaceAll("{{COVER_STAT_NUM}}", esc(coverStatNum))
+			.replaceAll("{{COVER_STAT_CAPTION}}", esc(coverStatCaption))
 			.replaceAll("{{WORD_COUNT_LABEL}}", esc(siteStats.wordCountLabel))
 			.replaceAll("{{STATUS_LABEL}}", esc(siteStats.statusLabel));
 	} else {
@@ -878,16 +1069,19 @@ async function buildHeadImage(built) {
 
 	const squarePngPath = path.join(built.dir, "head-square-500x500.png");
 	const squareStdPath = path.join(built.dir, "head-square.png");
-	try {
-		spawnSync("python3", [
-			"-c",
-			`from PIL import Image; im = Image.open('${pngPath}'); crop = im.crop((1280, 50, 1780, 550)); crop.save('${squarePngPath}'); crop.save('${squareStdPath}')`,
-		]);
-	} catch (e) {
-		console.error("生成正方形头图失败:", e);
+	const cropBox =
+		tplChoice === "e"
+			? "(1250, 133, 1750, 633)"
+			: tplChoice === "d"
+				? "(1280, 133, 1780, 633)"
+				: "(1280, 50, 1780, 550)";
+	const pyCode = `from PIL import Image; im = Image.open(r'${pngPath}'); crop = im.crop(${cropBox}); crop.save(r'${squarePngPath}'); crop.save(r'${squareStdPath}')`;
+	for (const pyBin of ["python3", "python"]) {
+		const r = spawnSync(pyBin, ["-c", pyCode], { encoding: "utf8" });
+		if (r.status === 0 && fs.existsSync(squarePngPath)) break;
 	}
 
-	return pngPath;
+	return { pngPath, tplChoice };
 }
 
 // ---------- 凭证 ----------
@@ -1149,7 +1343,7 @@ async function push(built, html, credentials) {
 	const { html: content } = await inlineImages(html, built.abs, token, uploads, stats);
 	mark("body-images");
 
-	const head = await buildHeadImage(built);
+	const { pngPath: head, tplChoice } = await buildHeadImage(built);
 	mark("head-image");
 	const { buffer, name } = await readImage(head, built.abs);
 	const thumbImage = await uploadImage(buffer, name, token, uploads, stats);
@@ -1157,15 +1351,25 @@ async function push(built, html, credentials) {
 	writeJson(UPLOADS, uploads);
 	mark("cover");
 
+	const crop1x1 =
+		tplChoice === "e"
+			? "0.694444_0.173629_0.972222_0.826371"
+			: tplChoice === "d"
+				? "0.711111_0.173629_0.988889_0.826371"
+				: "0.711111_0.065274_0.988889_0.718016";
+	// 微信草稿 digest 上限 120 字符，截取干净的摘要用于分享卡片与列表预览
+	const digest = (built.summary || "").replace(/\s+/g, " ").trim().slice(0, 118);
+
 	const article = {
 		title: built.title,
 		author: AUTHOR,
+		...(digest ? { digest } : {}),
 		content,
 		content_source_url: built.sourceUrl || "",
 		thumb_media_id: thumb,
 		need_open_comment: 0,
 		only_fans_can_comment: 0,
-		pic_crop_1_1: "0.711111_0.065274_0.988889_0.718016",
+		pic_crop_1_1: crop1x1,
 		pic_crop_235_1: "0_0_1_1",
 	};
 
@@ -1263,10 +1467,16 @@ async function main() {
 	const html = renderArticle(built);
 
 	if (command === "gen") {
+		let headFile = "";
+		if (rest.includes("--head")) {
+			const res = await buildHeadImage(built);
+			headFile = res.pngPath;
+		}
 		console.log("已生成（未联网、未上传）");
 		console.log(`  标题：${built.title}`);
 		console.log(`  body.html：${path.join(built.dir, "body.html")}`);
 		console.log(`  layout.json：${path.join(built.dir, "layout.json")}`);
+		if (headFile) console.log(`  头图：${headFile}`);
 		console.log(
 			`  封面：${built.cover || "无"} · 正文图片 ${built.images} · SVG ${built.inlineSvg} · Mermaid ${built.mermaid}`,
 		);

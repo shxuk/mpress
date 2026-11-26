@@ -1,6 +1,6 @@
 {
   "name": "wechat-article-publisher",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Markdown to WeChat Official Account HTML renderer, SVG fold injector & idempotent draft publisher",
   "type": "module",
   "main": "scripts/wechat.mjs",
@@ -9,7 +9,8 @@
   },
   "scripts": {
     "gen": "node scripts/wechat.mjs gen",
-    "push": "node scripts/wechat.mjs push"
+    "push": "node scripts/wechat.mjs push",
+    "preview": "node scripts/build-preview.mjs"
   },
   "dependencies": {
     "juice": "^11.0.0",
