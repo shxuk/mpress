@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 /**
+<<<<<<< HEAD
  * mpress 的唯一入口，两个动作：
+=======
+ * mpress 的唯一入口（旧�?wechat-publisher），两个动作�?
+>>>>>>> 4e0b692 (chore: rename 全链路切换到 mpress（repo/package/skill/路径�?
  *
  *   node scripts/wechat.mjs gen  <任意.md> [--source-url URL]   固定模板渲染 + 内联 HTML + layout.json
  *   node scripts/wechat.mjs push <任意.md> [--source-url URL]   渲染 + 换图片地址 + 合成头图 + 新建/更新草稿
@@ -64,7 +68,7 @@ if (fs.existsSync(envFile)) {
 	} catch {}
 }
 
-// 产物和草稿状态留在仓库外，源码目录保持只读
+// 产物和草稿状态留在仓库外，源码目录保持只�?
 const WORK = process.env.WECHAT_WORK_DIR || path.join(os.homedir(), ".wechat-article", "work");
 const STATE_DIR = path.join(WORK, "state");
 const THEME = path.join(SKILL_DIR, "assets", "theme.css");
@@ -75,14 +79,14 @@ const UPLOADS = path.join(STATE_DIR, "uploads.json");
 const AUTHOR = process.env.WECHAT_AUTHOR || "";
 const API = "https://api.weixin.qq.com/cgi-bin";
 
-/** 只有显式给了 BLOG_ROOT 才做站内链接补全和 /public 图片解析；独立使用时不依赖博客仓库 */
+/** 只有显式给了 BLOG_ROOT 才做站内链接补全�?/public 图片解析；独立使用时不依赖博客仓�?*/
 const BLOG_ROOT = (() => {
 	if (process.env.BLOG_ROOT && fs.existsSync(process.env.BLOG_ROOT)) return process.env.BLOG_ROOT;
 	if (fs.existsSync(path.join(process.cwd(), "astro.config.mjs"))) return process.cwd();
 	return "";
 })();
 
-const EXIT_CODES = { 凭证: 2, 白名单: 3, 图片: 4, 结构: 5, 网络: 6 };
+const EXIT_CODES = { 凭证: 2, 白名�? 3, 图片: 4, 结构: 5, 网络: 6 };
 
 // ---------- 计时 ----------
 
@@ -101,7 +105,7 @@ function mark(name) {
 function printTiming(label) {
 	if (!TIMING) return;
 	console.error(
-		`\n耗时（${label}）：进程内 ${(performance.now() - timingStart).toFixed(0)} ms · 含 Node 启动 ${(process.uptime() * 1000).toFixed(0)} ms`,
+		`\n耗时�?{label}）：进程�?${(performance.now() - timingStart).toFixed(0)} ms · �?Node 启动 ${(process.uptime() * 1000).toFixed(0)} ms`,
 	);
 	for (const [name, ms] of timingRows) console.error(`  ${name} ${ms.toFixed(0)} ms`);
 }
@@ -131,7 +135,7 @@ const writeJson = (file, value) => {
 	fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 };
 
-// ---------- 站点统计（供封面模板使用） ----------
+// ---------- 站点统计（供封面模板使用�?----------
 
 function getSiteStats(blogRoot) {
 	let totalChars = 0;
@@ -181,7 +185,7 @@ function getSiteStats(blogRoot) {
 	return { totalChars, wordCountLabel, runningDays, statusLabel, brand };
 }
 
-// ---------- Markdown 固定映射（唯一模板规则） ----------
+// ---------- Markdown 固定映射（唯一模板规则�?----------
 
 function expandComponents(body) {
 	const lines = body.split(/\r?\n/);
@@ -198,14 +202,14 @@ function expandComponents(body) {
 	for (let i = 0; i < lines.length; ) {
 		let line = lines[i];
 
-		// 链接包图片 [![alt](src)](href)：微信会剥掉 <a>，只保留图片，否则渲染出乱码
+		// 链接包图�?[![alt](src)](href)：微信会剥掉 <a>，只保留图片，否则渲染出乱码
 		const withoutLink = line.replace(/\[(!\[[^\]]*\]\([^)\s]+\))\]\([^)\s]+\)/g, "$1");
 		if (withoutLink !== line) {
 			mapped("image:linked-stripped", i);
 			line = withoutLink;
 		}
 
-		// 容器：::: githubcard / ::: details / ::: tip|note|warning|important|caution
+		// 容器�?:: githubcard / ::: details / ::: tip|note|warning|important|caution
 		const container = line.match(/^:::\s*([A-Za-z][A-Za-z0-9_-]*)(?:\[(.*?)\])?(?:\s+(.*?))?\s*$/);
 		if (container) {
 			const kind = container[1].toLowerCase();
@@ -385,7 +389,7 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 围栏：end / sign / mermaid / 普通代码
+		// 围栏：end / sign / mermaid / 普通代�?
 		const fence = line.match(/^```([A-Za-z0-9_-]+)?(?:\s+(.*))?$/);
 		if (fence) {
 			const lang = (fence[1] || "").toLowerCase();
@@ -395,7 +399,7 @@ function expandComponents(body) {
 				buf.push(lines[j]);
 				j++;
 			}
-			if (j >= lines.length) fail("结构", "代码块没有闭合", "补一行 ```");
+			if (j >= lines.length) fail("结构", "代码块没有闭�?, "补一�?```");
 			mapped(`fence:${lang || "code"}`, i);
 			i = j + 1;
 			gap();
@@ -412,7 +416,7 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 引用块：提示块 / 长引（出处以 —— 开头）/ 普通引用
+		// 引用块：提示�?/ 长引（出处以 —�?开头）/ 普通引�?
 		if (/^>/.test(line)) {
 			const buf = [];
 			let j = i;
@@ -424,7 +428,7 @@ function expandComponents(body) {
 			const boxToken = first.split(/\s+/, 1)[0];
 			const boxKind = BOX_KINDS[boxToken];
 			const boxTitle = boxKind ? first.slice(boxToken.length).trim() : "";
-			const isLongQuote = /^——/.test((buf[buf.length - 1] || "").trim());
+			const isLongQuote = /^—�?.test((buf[buf.length - 1] || "").trim());
 			mapped(boxKind ? `box:${boxToken.toLowerCase()}` : isLongQuote ? "quote:source" : "quote", i);
 			i = j;
 			gap();
@@ -444,7 +448,7 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 一级标题：首个 H1 在公众号正文剥除，后续 H1 为篇章标题
+		// 一级标题：首个 H1 在公众号正文剥除，后�?H1 为篇章标�?
 		const h1 = line.match(/^#\s+(.+)$/);
 		if (h1) {
 			if (!seenChapter) {
@@ -461,15 +465,15 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 二级标题（唯一样式）：全部输出墨青色正方形数字页签（01、02...），并自动剥离冗余的中文/阿拉伯序号（如「一、」「1.」）
+		// 二级标题（唯一样式）：全部输出墨青色正方形数字页签�?1�?2...），并自动剥离冗余的中文/阿拉伯序号（如「一、」�?.」）
 		const h2Match = line.match(/^##\s+(?:(\d{1,2})\s+)?(\S.*)$/);
 		if (h2Match) {
 			mapped("chapter-tab", i);
 			gap();
 			let no = h2Match[1];
 			let titleText = h2Match[2].trim();
-			// 若未显式写阿拉伯编号，剥除前导「一、」「二、」「1.」「01、」防止与墨青方块页签重复
-			titleText = titleText.replace(/^(?:[一二三四五六七八九十百]+[、.．]\s*|\d{1,2}[、.．]\s*)/, "").trim();
+			// 若未显式写阿拉伯编号，剥除前导「一、」「二、」�?.」�?1、」防止与墨青方块页签重复
+			titleText = titleText.replace(/^(?:[一二三四五六七八九十百]+[�?．]\s*|\d{1,2}[�?．]\s*)/, "").trim();
 			if (no) {
 				no = String(parseInt(no, 10)).padStart(2, "0");
 				h2Counter = parseInt(no, 10) + 1;
@@ -483,7 +487,7 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 三级标题：3px 墨色左竖线小节标题
+		// 三级标题�?px 墨色左竖线小节标�?
 		const h3 = line.match(/^###\s+(.+)$/);
 		if (h3) {
 			mapped("heading-3", i);
@@ -494,7 +498,7 @@ function expandComponents(body) {
 			continue;
 		}
 
-		// 图片 + 下一行斜体图注
+		// 图片 + 下一行斜体图�?
 		const img = line.match(/^!\[(.*?)\]\((.+?)\)\s*$/);
 		if (img) {
 			let k = i + 1;
@@ -516,7 +520,7 @@ function expandComponents(body) {
 	return { body: out.join("\n"), mappings };
 }
 
-// ---------- 源稿解析与产物构建 ----------
+// ---------- 源稿解析与产物构�?----------
 
 function parseFrontmatter(text) {
 	const data = {};
@@ -565,8 +569,8 @@ function resolveAsset(src, sourcePath) {
 	if (src.startsWith("/") && !BLOG_ROOT) {
 		fail(
 			"图片",
-			`站内图片需要站点根目录：${src}`,
-			"设 BLOG_ROOT 指向仓库根，或把图片改成相对源稿的路径",
+			`站内图片需要站点根目录�?{src}`,
+			"�?BLOG_ROOT 指向仓库根，或把图片改成相对源稿的路�?,
 		);
 	}
 	const local = src.startsWith("/")
@@ -581,7 +585,7 @@ function resolveAsset(src, sourcePath) {
 function assertWritable(target) {
 	const workRel = path.relative(WORK, target);
 	if (!workRel || workRel.startsWith("..") || path.isAbsolute(workRel)) {
-		fail("结构", `产物目录越界：${target}`, "slug 不能指向上级目录");
+		fail("结构", `产物目录越界�?{target}`, "slug 不能指向上级目录");
 	}
 }
 
@@ -598,14 +602,14 @@ function bookTitleOf(abs) {
 
 function buildArticle(source, sourceUrl) {
 	if (/\.mdx$/i.test(source)) {
-		fail("结构", "MDX 不支持：公众号没有 Astro 运行时", "改用纯 .md");
+		fail("结构", "MDX 不支持：公众号没�?Astro 运行�?, "改用�?.md");
 	}
 	const abs = path.resolve(CWD, source);
 	if (path.extname(abs).toLowerCase() !== ".md") {
-		fail("结构", "源文件必须是纯 .md", "不要传 .mdx、Astro 组件或派生稿");
+		fail("结构", "源文件必须是�?.md", "不要�?.mdx、Astro 组件或派生稿");
 	}
 	if (!fs.existsSync(abs)) {
-		fail("结构", `源文件不存在：${abs}`, "路径按当前目录解析，例如 ./文章.md");
+		fail("结构", `源文件不存在�?{abs}`, "路径按当前目录解析，例如 ./文章.md");
 	}
 
 	const contentRoot = BLOG_ROOT ? path.join(BLOG_ROOT, "content") : "";
@@ -663,14 +667,14 @@ function buildArticle(source, sourceUrl) {
 		if (first && !/^https?:/i.test(first[1])) cover = first[1];
 	}
 	if (!cover && fs.existsSync(DEFAULT_COVER)) cover = DEFAULT_COVER;
-	if (!cover) fail("图片", "没有封面，正文里也没有本地图片", "在 assets/default-cover.png 放一张默认封面");
+	if (!cover) fail("图片", "没有封面，正文里也没有本地图�?, "�?assets/default-cover.png 放一张默认封�?);
 
 	const summary = (data.description || data.summary || data.digest || "").trim();
 	const book = (data.banner?.book || data.book || bookTitleOf(abs) || "").trim();
 	const chapterTitle = title;
-	// 书稿文章在公众号标题自动带上书名：「书名 ：章标题」
+	// 书稿文章在公众号标题自动带上书名：「书�?：章标题�?
 	if (book && !title.includes(book)) {
-		title = `${book} ：${title}`;
+		title = `${book} �?{title}`;
 	}
 	const tags = Array.isArray(data.tags) ? data.tags : data.tags ? [String(data.tags)] : [];
 	const category = (data.category || "").trim();
@@ -752,7 +756,7 @@ function buildArticle(source, sourceUrl) {
 	};
 }
 
-// ---------- 样式内联与链接检查 ----------
+// ---------- 样式内联与链接检�?----------
 
 function restoreSvgHeight(html) {
 	return html.replace(/<svg\b[^>]*>/gi, (tag) => {
@@ -795,39 +799,39 @@ function checkLinkForms(html) {
 		const href = m[2].trim();
 		if (/^https?:\/\//i.test(href)) {
 			if (/^https?:\/\/mp\.weixin\.qq\.com(\/|$)/i.test(href)) {
-				fatal.push([href, "公众号文章地址会返回 45166"]);
+				fatal.push([href, "公众号文章地址会返�?45166"]);
 			}
 			continue;
 		}
 		if (/^(mailto:|tel:)/i.test(href)) continue;
 		if (href.startsWith("#")) {
-			fatal.push([href, "锚点会返回 45166"]);
+			fatal.push([href, "锚点会返�?45166"]);
 		} else if (href.startsWith("/")) {
 			fatal.push([href, "站内相对地址没有被补成绝对地址"]);
 		} else {
-			soft.push(href || "(空 href)");
+			soft.push(href || "(�?href)");
 		}
 	}
 	if (fatal.length) {
 		const list = fatal
 			.slice(0, 5)
-			.map(([href, why]) => `${href}（${why}）`)
-			.join("；");
+			.map(([href, why]) => `${href}�?{why}）`)
+			.join("�?);
 		fail(
 			"结构",
-			`链接形态微信不接受：${list}`,
-			"外链写 https:// 完整地址；站内链接要先设 WECHAT_SITE_URL；不要写 #锚点 或 mp.weixin.qq.com 地址",
+			`链接形态微信不接受�?{list}`,
+			"外链�?https:// 完整地址；站内链接要先设 WECHAT_SITE_URL；不要写 #锚点 �?mp.weixin.qq.com 地址",
 		);
 	}
 	if (soft.length) {
-		console.error(`提示：微信会把以下链接剥成纯文字，读者无法点击：${soft.slice(0, 5).join("；")}`);
+		console.error(`提示：微信会把以下链接剥成纯文字，读者无法点击：${soft.slice(0, 5).join("�?)}`);
 	}
 }
 
 function renderArticle(built) {
 	const mdPath = path.join(built.dir, "article.md");
 	if (!fs.existsSync(mdPath)) {
-		fail("结构", `文章源文件不存在：${mdPath}`, "请检查生成流程");
+		fail("结构", `文章源文件不存在�?{mdPath}`, "请检查生成流�?);
 	}
 	const rawFile = fs.readFileSync(mdPath, "utf8");
 	const mdContent = rawFile.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, "");
@@ -842,7 +846,7 @@ function renderArticle(built) {
 			preserveImportant: true,
 		});
 	} catch (e) {
-		fail("结构", `CSS 样式内联失败：${e.message}`, "请检查 theme.css 语法规范");
+		fail("结构", `CSS 样式内联失败�?{e.message}`, "请检�?theme.css 语法规范");
 	}
 
 	mark("inline-render");
@@ -854,7 +858,7 @@ function renderArticle(built) {
 	return html;
 }
 
-// ---------- 头图：底图 + 由页面排上去的文字 ----------
+// ---------- 头图：底�?+ 由页面排上去的文�?----------
 
 const HEAD_W = 1800;
 const HEAD_H = 766;
@@ -976,7 +980,7 @@ async function buildHeadImage(built) {
 	const bookTag = /GEO|AI-SEO/i.test(built.book) ? "AI-SEO" : /文案/i.test(built.book) ? "COPY" : "BOOK";
 
 	const spineText = isBook ? `${brandUpper} · 专著` : `${brandUpper} · 深度专题`;
-	const eyebrow = isBook ? `BOOK · ${built.book}` : isTool ? "TOOL · 工程与开源" : "ESSAY · 思考与观察";
+	const eyebrow = isBook ? `BOOK · ${built.book}` : isTool ? "TOOL · 工程与开�? : "ESSAY · 思考与观察";
 	const issueShort = built.seriesOrder ? String(built.seriesOrder).padStart(2, "0") : String(now.getMonth() + 1).padStart(2, "0");
 	const issueNo =
 		process.env.WECHAT_ISSUE ||
@@ -991,8 +995,8 @@ async function buildHeadImage(built) {
 	const coverStatNum = built.coverStatNum || issueShort;
 	const coverStatCaption = built.coverStatCaption || built.title.slice(0, 18);
 	const coverHeading = built.chapterTitle || built.title;
-	const titleShort = coverHeading.replace(/^[^：:]+[：:]\s*/, "").slice(0, 18);
-	const bookOrTag = isBook ? built.book : isTool ? "开源工具 · TOOL" : `观点长文 · ${tag}`;
+	const titleShort = coverHeading.replace(/^[^�?]+[�?]\s*/, "").slice(0, 18);
+	const bookOrTag = isBook ? built.book : isTool ? "开源工�?· TOOL" : `观点长文 · ${tag}`;
 
 	let html = "";
 	if (fs.existsSync(tplPath)) {
@@ -1036,7 +1040,7 @@ async function buildHeadImage(built) {
 
 	const browsers = browserCandidates();
 	if (!browsers.length) {
-		fail("结构", "找不到 Chrome 或 Edge，无法生成头图", "安装 Chrome/Edge，或用 WECHAT_CHROME 指向可执行文件");
+		fail("结构", "找不�?Chrome �?Edge，无法生成头�?, "安装 Chrome/Edge，或�?WECHAT_CHROME 指向可执行文�?);
 	}
 
 	let lastStderr = "";
@@ -1064,7 +1068,7 @@ async function buildHeadImage(built) {
 	}
 
 	if (!fs.existsSync(pngPath)) {
-		fail("结构", "头图没有生成", lastStderr || "检查 Chrome / Edge 是否可执行");
+		fail("结构", "头图没有生成", lastStderr || "检�?Chrome / Edge 是否可执�?);
 	}
 
 	const squarePngPath = path.join(built.dir, "head-square-500x500.png");
@@ -1112,7 +1116,7 @@ function loadCredentials() {
 		fail(
 			"凭证",
 			"没有读到 AppID / AppSecret",
-			`把凭证写入 ${path.join(SKILL_DIR, "credentials")} 后重跑`,
+			`把凭证写�?${path.join(SKILL_DIR, "credentials")} 后重跑`,
 		);
 	}
 	return { appId, secret };
@@ -1124,23 +1128,23 @@ function wechatError(data, stage) {
 
 	if (code === 40164 || /whitelist|invalid ip/i.test(msg)) {
 		return new PublishError(
-			"白名单",
+			"白名�?,
 			`${code} ${msg}`,
-			"把当前出口 IP 加入公众号后台「设置与开发 → 基本配置 → IP 白名单」",
+			"把当前出�?IP 加入公众号后台「设置与开�?�?基本配置 �?IP 白名单�?,
 		);
 	}
 	if ([40001, 40013, 40125, 41002, 41004, 42001, 48001].includes(code)) {
 		return new PublishError(
 			"凭证",
 			`${code} ${msg}`,
-			"核对 AppID / AppSecret；48001 表示账号未认证或没有草稿箱 / 素材库权限",
+			"核对 AppID / AppSecret�?8001 表示账号未认证或没有草稿�?/ 素材库权�?,
 		);
 	}
 	if ([40004, 40005, 40006, 40007, 40009, 40113, 41005, 45001, 45110].includes(code)) {
 		return new PublishError(
 			"图片",
 			`${code} ${msg}`,
-			"图片需 JPG / PNG、≤10MB，且 media_id 仍有效",
+			"图片需 JPG / PNG、≤10MB，且 media_id 仍有�?,
 		);
 	}
 	if ([44002, 44003, 45002, 45003, 45004, 45166].includes(code)) {
@@ -1154,7 +1158,7 @@ function wechatError(data, stage) {
 		return new PublishError("网络", `${code} ${msg}`, "接口频率超限，等几分钟再重试");
 	}
 	const kind = stage === "token" ? "凭证" : stage === "image" ? "图片" : "结构";
-	return new PublishError(kind, `${code} ${msg}`, "按 errcode 查微信官方文档");
+	return new PublishError(kind, `${code} ${msg}`, "�?errcode 查微信官方文�?);
 }
 
 async function wechatRequest(url, init, stage) {
@@ -1162,20 +1166,20 @@ async function wechatRequest(url, init, stage) {
 	try {
 		res = await fetch(url, init);
 	} catch (error) {
-		fail("网络", `请求微信接口失败：${error.message}`, "确认本机可访问 api.weixin.qq.com");
+		fail("网络", `请求微信接口失败�?{error.message}`, "确认本机可访�?api.weixin.qq.com");
 	}
 
 	const text = await res.text();
 	if (!res.ok) {
 		const kind = stage === "token" ? "凭证" : stage === "image" ? "图片" : "结构";
-		fail(kind, `HTTP ${res.status} ${res.statusText}：${text.slice(0, 200)}`, "重试一次；持续失败再排查");
+		fail(kind, `HTTP ${res.status} ${res.statusText}�?{text.slice(0, 200)}`, "重试一次；持续失败再排�?);
 	}
 
 	let data;
 	try {
 		data = JSON.parse(text);
 	} catch {
-		fail("结构", `微信接口返回的不是 JSON：${text.slice(0, 200)}`, "通常是网关 / 代理拦截，检查出口网络");
+		fail("结构", `微信接口返回的不�?JSON�?{text.slice(0, 200)}`, "通常是网�?/ 代理拦截，检查出口网�?);
 	}
 	return data;
 }
@@ -1197,7 +1201,7 @@ async function getToken(appId, secret) {
 	);
 	if (data.errcode) throw wechatError(data, "token");
 	if (!data.access_token) {
-		fail("凭证", "token 接口没有返回 access_token", "确认账号已认证、接口权限已开通");
+		fail("凭证", "token 接口没有返回 access_token", "确认账号已认证、接口权限已开�?);
 	}
 	return data.access_token;
 }
@@ -1222,13 +1226,13 @@ const EXT_BY_MIME = { "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".
 function mimeOf(name, buffer) {
 	const sniff = sniffMime(buffer);
 	if (sniff === "image/webp") {
-		fail("图片", `${name} 是 WebP`, "微信不收 WebP，先导出 JPG / PNG");
+		fail("图片", `${name} �?WebP`, "微信不收 WebP，先导出 JPG / PNG");
 	}
 	if (sniff) return sniff;
 
 	const ext = path.extname(name).toLowerCase();
 	if (ext === ".webp") {
-		fail("图片", `${name} 是 WebP`, "微信不收 WebP，先导出 JPG / PNG");
+		fail("图片", `${name} �?WebP`, "微信不收 WebP，先导出 JPG / PNG");
 	}
 	if (ext === ".png") return "image/png";
 	if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
@@ -1245,10 +1249,10 @@ async function uploadImage(buffer, name, token, cache, stats) {
 
 	const base = path.basename(name);
 	const type = mimeOf(base, buffer);
-	if (!type) fail("图片", `不支持的图片类型：${base}`, "只支持 JPG / PNG / GIF");
-	if (buffer.length === 0) fail("图片", `图片是空文件：${base}`, "重新导出这张图");
+	if (!type) fail("图片", `不支持的图片类型�?{base}`, "只支�?JPG / PNG / GIF");
+	if (buffer.length === 0) fail("图片", `图片是空文件�?{base}`, "重新导出这张�?);
 	if (buffer.length > 10 * 1024 * 1024) {
-		fail("图片", `${base} ${(buffer.length / 1048576).toFixed(1)}MB，超过 10MB`, "压到 10MB 以内再发");
+		fail("图片", `${base} ${(buffer.length / 1048576).toFixed(1)}MB，超�?10MB`, "压到 10MB 以内再发");
 	}
 
 	const filename = `${path.parse(base).name || "image"}${EXT_BY_MIME[type] || path.extname(base)}`;
@@ -1284,10 +1288,10 @@ async function readImage(src, sourcePath) {
 		try {
 			res = await fetch(src);
 		} catch (error) {
-			fail("图片", `外链图片下载失败：${src}`, error.message);
+			fail("图片", `外链图片下载失败�?{src}`, error.message);
 		}
 		if (!res.ok) {
-			fail("图片", `外链图片下载失败 HTTP ${res.status}：${src}`, "确认外链可公开访问，或先下载到本地");
+			fail("图片", `外链图片下载失败 HTTP ${res.status}�?{src}`, "确认外链可公开访问，或先下载到本地");
 		}
 		let name = "image.jpg";
 		try {
@@ -1331,7 +1335,7 @@ async function inlineImages(html, sourcePath, token, cache, stats) {
 	return { html: output, firstMediaId };
 }
 
-// ---------- 草稿推送 ----------
+// ---------- 草稿推�?----------
 
 async function push(built, html, credentials) {
 	const { appId, secret } = credentials;
@@ -1398,7 +1402,7 @@ async function push(built, html, credentials) {
 		} else if (res.errcode !== 40007) {
 			throw wechatError(res, "draft");
 		} else {
-			console.error("旧 media_id 已失效（草稿被删？），改为新建。");
+			console.error("�?media_id 已失效（草稿被删？），改为新建�?);
 		}
 	}
 
@@ -1423,10 +1427,10 @@ async function push(built, html, credentials) {
 	mark("draft");
 
 	const mediaId = drafts[built.slug]?.media_id || previous;
-	console.log(`已${mode}草稿（未群发）`);
-	console.log(`  标题：${built.title}`);
-	console.log(`  原文：${built.sourceUrl || "(未设置)"}`);
-	console.log(`  media_id：${mediaId}`);
+	console.log(`�?{mode}草稿（未群发）`);
+	console.log(`  标题�?{built.title}`);
+	console.log(`  原文�?{built.sourceUrl || "(未设�?"}`);
+	console.log(`  media_id�?{mediaId}`);
 	console.log(`  图片：新上传 ${stats.uploaded} / 复用 ${stats.cached}（已换成微信地址）`);
 	console.log(`  草稿箱：https://mp.weixin.qq.com/`);
 }
@@ -1453,7 +1457,7 @@ async function main() {
 	if (!command || !["gen", "push"].includes(command) || !source) {
 		console.error(
 			"usage: wechat.mjs <gen|push> <文章.md> [--source-url URL] [--timing]\n" +
-				"  gen       按固定模板生成内联 HTML 和 layout.json，不联网\n" +
+				"  gen       按固定模板生成内�?HTML �?layout.json，不联网\n" +
 				"  push      生成 + 换图片地址 + 合成头图 + 新建/更新草稿\n" +
 				"  --timing  把每个阶段耗时打到 stderr",
 		);
@@ -1472,13 +1476,13 @@ async function main() {
 			const res = await buildHeadImage(built);
 			headFile = res.pngPath;
 		}
-		console.log("已生成（未联网、未上传）");
-		console.log(`  标题：${built.title}`);
-		console.log(`  body.html：${path.join(built.dir, "body.html")}`);
-		console.log(`  layout.json：${path.join(built.dir, "layout.json")}`);
-		if (headFile) console.log(`  头图：${headFile}`);
+		console.log("已生成（未联网、未上传�?);
+		console.log(`  标题�?{built.title}`);
+		console.log(`  body.html�?{path.join(built.dir, "body.html")}`);
+		console.log(`  layout.json�?{path.join(built.dir, "layout.json")}`);
+		if (headFile) console.log(`  头图�?{headFile}`);
 		console.log(
-			`  封面：${built.cover || "无"} · 正文图片 ${built.images} · SVG ${built.inlineSvg} · Mermaid ${built.mermaid}`,
+			`  封面�?{built.cover || "�?} · 正文图片 ${built.images} · SVG ${built.inlineSvg} · Mermaid ${built.mermaid}`,
 		);
 		printTiming("gen");
 		return;
@@ -1490,10 +1494,10 @@ async function main() {
 
 main().catch((error) => {
 	if (error instanceof PublishError) {
-		console.error(`\n失败（${error.kind}）：${error.message}`);
-		if (error.hint) console.error(`  处理：${error.hint}`);
+		console.error(`\n失败�?{error.kind}）：${error.message}`);
+		if (error.hint) console.error(`  处理�?{error.hint}`);
 		process.exit(EXIT_CODES[error.kind] || 1);
 	}
-	console.error(`\n失败（其他）：${error.stack || error.message}`);
+	console.error(`\n失败（其他）�?{error.stack || error.message}`);
 	process.exit(1);
 });
